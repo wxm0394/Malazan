@@ -189,6 +189,24 @@ public:
             SDL_RenderLine(renderer, cx + 7.0f, cy, cx + 7.0f, cy + 5.0f);
             SDL_RenderLine(renderer, cx, cy + 5.0f, cx + 7.0f, cy + 5.0f);
             SDL_RenderLine(renderer, cx + 3.0f, cy + 5.0f, cx + 7.0f, cy + 10.0f);
+        } else if (glyph == 'P') { // 克鲁普 (Pastry & Philosopher)
+            SDL_RenderLine(renderer, cx, cy, cx, cy + 10.0f);
+            SDL_RenderLine(renderer, cx, cy, cx + 7.0f, cy);
+            SDL_RenderLine(renderer, cx + 7.0f, cy, cx + 7.0f, cy + 5.0f);
+            SDL_RenderLine(renderer, cx, cy + 5.0f, cx + 7.0f, cy + 5.0f);
+        } else if (glyph == 'O') { // 克罗库斯 (Oponn's coin)
+            SDL_FRect o_rect{cx, cy, 7.0f, 10.0f};
+            SDL_RenderRect(renderer, &o_rect);
+        } else if (glyph == 'A') { // 阿诺曼德·雷克 (Anomander Rake)
+            SDL_RenderLine(renderer, cx + 3.5f, cy, cx, cy + 10.0f);
+            SDL_RenderLine(renderer, cx + 3.5f, cy, cx + 7.0f, cy + 10.0f);
+            SDL_RenderLine(renderer, cx + 1.5f, cy + 6.0f, cx + 5.5f, cy + 6.0f);
+        } else if (glyph == 'G') { // 城防军卫兵 (City Watch Guard)
+            SDL_RenderLine(renderer, cx + 7.0f, cy, cx, cy);
+            SDL_RenderLine(renderer, cx, cy, cx, cy + 10.0f);
+            SDL_RenderLine(renderer, cx, cy + 10.0f, cx + 7.0f, cy + 10.0f);
+            SDL_RenderLine(renderer, cx + 7.0f, cy + 5.0f, cx + 7.0f, cy + 10.0f);
+            SDL_RenderLine(renderer, cx + 3.0f, cy + 5.0f, cx + 7.0f, cy + 5.0f);
         }
     }
 

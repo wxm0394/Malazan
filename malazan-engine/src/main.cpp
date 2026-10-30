@@ -3,6 +3,8 @@
 #include "Components/Components.hpp"
 #include "Components/InventoryComponent.hpp"
 #include "Components/OtataralComponent.hpp"
+#include "Components/DragnipurComponent.hpp"
+#include "Components/FactionReputationComponent.hpp"
 #include "World/DarujhistanMap.hpp"
 #include "Core/DataLoader.hpp"
 #include "Systems/TurnSystem.hpp"
@@ -12,6 +14,10 @@
 #include "Systems/FOVSystem.hpp"
 #include "Systems/OtataralSystem.hpp"
 #include "Systems/PathfindingSystem.hpp"
+#include "Systems/DragnipurSystem.hpp"
+#include "Systems/FactionSystem.hpp"
+#include "Systems/InteractionSystem.hpp"
+#include "Story/DialogueSystem.hpp"
 #include "Render/GameViewport.hpp"
 
 #include <iostream>
@@ -28,8 +34,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "========================================================================\n";
-    std::cout << "  《玛拉赞落魄之书》：达鲁基斯坦 (Darujhistan) - 战术核心引擎\n";
-    std::cout << "  Phase 1 战术深度: 3D A* 寻路 | 奥塔拉尔绝魔死域 | 战争迷雾 | 破桥军军械库\n";
+    std::cout << "  《玛拉赞落魄之书》：达鲁基斯坦 (Darujhistan) - 战术与沙盒引擎\n";
+    std::cout << "  Phase 2 实体与沙盒生态: 凤凰客栈同盟 | 德拉格尼普尔黑剑 | 阵营外交声望\n";
     std::cout << "========================================================================\n\n";
 
     Registry reg;
@@ -67,17 +73,36 @@ int main(int argc, char* argv[]) {
         reg, "assets/data/actors.json", "claw_assassin", {10, 6}, ElevationLevel::Street
     );
 
-    std::cout << "  * 破桥军小队与帝国爪牙已成功从 JSON 模板部署入场。\n";
+    // Phase 2 新增：活化沙盒 NPC 生态入场
+    Entity kruppe = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "kruppe", {5, 5}, ElevationLevel::Street
+    );
+    Entity crokus = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "crokus", {7, 6}, ElevationLevel::Rooftop
+    );
+    Entity rake = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "anomander_rake", {14, 4}, ElevationLevel::Rooftop
+    );
+    Entity guard = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "city_watch_guard", {2, 4}, ElevationLevel::Street
+    );
 
-    // 验证 Phase 1 系统核心逻辑
+    std::cout << "  * 破桥军小队、凤凰客栈克鲁普、飞贼克罗库斯、城防守卫与黑夜之王阿诺曼德·雷克已全部就位。\n";
+
     if (reg.has<InventoryComponent>(kalam)) {
         auto& inv = reg.get<InventoryComponent>(kalam);
         std::cout << "  * [装备验证] 卡拉姆主手已装备: 【" 
                   << (inv.equipped_main_hand.has_value() ? inv.equipped_main_hand->name : "空") << "】\n";
     }
 
+    if (reg.has<DragnipurComponent>(rake)) {
+        auto& drag = reg.get<DragnipurComponent>(rake);
+        std::cout << "  * [神器验证] 雷克黑剑【德拉格尼普尔】已觉醒，当前拉车亡魂数: " 
+                  << drag.trapped_souls.size() << " | 纯暗大车自重: " << drag.wagon_weight << "\n";
+    }
+
     if (!headless) {
-        std::cout << "\n[视口启动] 正在唤醒 SDL3 战术图形视口窗口 (2.5D 等距立体高清)...\n";
+        std::cout << "\n[视口启动] 正在唤醒 SDL3 战术图形视口窗口 (2.5D 等距立体高清 - Phase 2)...\n";
         GameViewport viewport(1440, 860);
         if (viewport.init()) {
             viewport.run(reg, city_map, kalam, quick_ben, claw_agent);
@@ -87,49 +112,61 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // 无头测试模式（自动化 Phase 1 战术模块与主线 1~3 幕回归测试）
-    std::cout << "\n[无头测试模式] 开始回归测试 Phase 1 战术模块...\n";
+    // 无头测试模式（自动化 Phase 1 & 2 战术与沙盒生态完整回归）
+    std::cout << "\n[无头测试模式] 开始回归测试 Phase 2 实体与沙盒生态模块...\n";
 
-    // A. 3D A* 空间寻路测试
-    std::cout << "\n--- [测试 1: 3D A* 寻路] --- \n";
-    PathNode start_node{{2, 2}, ElevationLevel::Street};
-    PathNode goal_node{{8, 6}, ElevationLevel::Rooftop}; // 目标在凤凰客栈屋顶
-    auto path = PathfindingSystem::find_path(start_node, goal_node, city_map, true);
-    std::cout << "  从街面 (2,2) 寻路至屋顶 (8,6) 最优路径节点数: " << path.size() << "\n";
-    for (size_t i = 0; i < std::min<size_t>(5, path.size()); ++i) {
-        std::cout << "    Step " << i << ": (" << path[i].pos.x << ", " << path[i].pos.y 
-                  << ") [" << elevation_to_string(path[i].elev) << "]\n";
+    // 1. NPC 交互与对话分支测试
+    std::cout << "\n--- [测试 1: NPC 交互与深度剧情对话系统] --- \n";
+    auto dlg_kruppe = DialogueSystem::get_dialogue_for(kruppe, kalam, reg);
+    std::cout << "  说话者: " << dlg_kruppe.speaker_name << " (" << dlg_kruppe.speaker_title << ")\n";
+    std::cout << "  开场白: " << dlg_kruppe.dialogue_text.substr(0, 70) << "...\n";
+    std::vector<std::string> choice_logs;
+    DialogueSystem::apply_dialogue_choice(kruppe, kalam, 0, reg, choice_logs);
+    for (const auto& cl : choice_logs) std::cout << "    " << cl << "\n";
+
+    auto dlg_crokus = DialogueSystem::get_dialogue_for(crokus, kalam, reg);
+    choice_logs.clear();
+    DialogueSystem::apply_dialogue_choice(crokus, kalam, 0, reg, choice_logs);
+    for (const auto& cl : choice_logs) std::cout << "    " << cl << "\n";
+
+    // 2. 德拉格尼普尔摄魂与纯暗大车推进测试
+    std::cout << "\n--- [测试 2: 德拉格尼普尔 (Dragnipur) 锁链摄魂机制] --- \n";
+    // 实例化一名潜伏的帝国特工并由雷克挥剑处决
+    Entity test_target = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "claw_assassin", {14, 5}, ElevationLevel::Rooftop
+    );
+    std::vector<std::string> drag_logs;
+    DragnipurSystem::slay_and_trap(rake, test_target, reg, drag_logs);
+    for (const auto& dl : drag_logs) std::cout << "  " << dl << "\n";
+
+    // 3. 阵营声望矩阵与仇恨演化测试
+    std::cout << "\n--- [测试 3: 阵营外交声望动态反馈] --- \n";
+    std::vector<std::string> rep_logs;
+    FactionSystem::on_kill(kalam, claw_agent, reg, rep_logs);
+    for (const auto& rl : rep_logs) std::cout << "  " << rl << "\n";
+
+    if (reg.has<FactionReputationComponent>(kalam)) {
+        auto& rep = reg.get<FactionReputationComponent>(kalam);
+        std::cout << "  当前阵营好感度一览:\n";
+        std::cout << "    * 凤凰客栈同盟: " << rep.get(Faction::PhoenixInnCircle) 
+                  << " (" << FactionReputationComponent::relation_to_string(rep.get_relation(Faction::PhoenixInnCircle)) << ")\n";
+        std::cout << "    * 刺客公会: " << rep.get(Faction::CityAssassinsGuild) 
+                  << " (" << FactionReputationComponent::relation_to_string(rep.get_relation(Faction::CityAssassinsGuild)) << ")\n";
+        std::cout << "    * 帝国爪牙: " << rep.get(Faction::ImperialClaw) 
+                  << " (" << FactionReputationComponent::relation_to_string(rep.get_relation(Faction::ImperialClaw)) << ")\n";
     }
 
-    // B. FOV 光线投射视野测试
-    std::cout << "\n--- [测试 2: FOV 光线投射与战争迷雾] --- \n";
-    std::vector<VisibilityState> fog_grid;
-    FOVSystem::compute_fov({6, 6}, ElevationLevel::Rooftop, 8, city_map, fog_grid);
-    int visible_count = 0;
-    for (auto s : fog_grid) if (s == VisibilityState::Visible) visible_count++;
-    std::cout << "  卡拉姆于屋顶 (6,6) 观测全城，可见格数: " << visible_count << "/" << fog_grid.size() << "\n";
-
-    // C. 奥塔拉尔绝魔死域测试
-    std::cout << "\n--- [测试 3: 奥塔拉尔反魔力场压制] --- \n";
-    float ota_intensity = 0.0f;
-    bool suppressed = OtataralSystem::is_suppressed_at({6, 6}, ElevationLevel::Rooftop, reg, &ota_intensity);
-    std::cout << "  坐标 (6,6) 处反魔压制状态: " << (suppressed ? "处于奥塔拉尔死域中" : "正常") 
-              << " | 压制强度: " << (ota_intensity * 100.0f) << "%\n";
-
-    // D. 莫兰斯“卡瑟”巨弹引爆测试
-    std::cout << "\n--- [测试 4: 破桥军莫兰斯·卡瑟毁灭巨弹] --- \n";
-    std::vector<std::string> cusser_logs;
-    BlueFireGasSystem::throw_moranth_munition(kalam, MoranthMunitionType::Sharper, {10, 6}, reg, city_map, true, &cusser_logs);
-    for (const auto& log : cusser_logs) std::cout << "  " << log << "\n";
-
-    // E. 主线战役剧情自动化贯通回归测试
-    std::cout << "\n--- [测试 5: 主线全剧幕贯通回归] --- \n";
+    // 4. 主线三幕流程贯通回归测试
+    std::cout << "\n--- [测试 4: 主线全剧幕贯通回归] --- \n";
     std::cout << ">>> 当前主线: 【" << StorylineSystem::get_act_title() << "】\n";
+    // 刺杀爪牙触发第二幕暴君出世
+    RooftopTacticsSystem::execute_plunging_ambush(kalam, claw_agent, reg, city_map);
+    reg.get<ActorComponent>(claw_agent).is_alive = false;
     std::vector<std::string> story_logs;
     StorylineSystem::check_progression(reg, city_map, story_logs);
     for (const auto& log : story_logs) std::cout << "  " << log << "\n";
 
-    // 第二幕：迎战上古贾格特暴君雷斯特
+    // 第二幕：暴君出世
     std::cout << "\n>>> 推进至: 【" << StorylineSystem::get_act_title() << "】\n";
     if (StorylineSystem::boss_raest_entity != NULL_ENTITY) {
         reg.get<PositionComponent>(StorylineSystem::boss_raest_entity).coord = {10, 6};
@@ -139,15 +176,16 @@ int main(int argc, char* argv[]) {
     StorylineSystem::check_progression(reg, city_map, story_logs);
     for (const auto& log : story_logs) std::cout << "  " << log << "\n";
 
-    // 第三幕：触发阿扎斯破土封印
+    // 第三幕：阿扎斯封印
     std::cout << "\n>>> 推进至: 【" << StorylineSystem::get_act_title() << "】\n";
     story_logs.clear();
     StorylineSystem::trigger_azath_sealing(reg, city_map, story_logs);
     for (const auto& log : story_logs) std::cout << "  " << log << "\n";
 
     std::cout << "\n========================================================================\n";
-    std::cout << "  Phase 1 战术系统测试全部通过!\n";
+    std::cout << "  Phase 2 战术与沙盒生态测试全部通过!\n";
     std::cout << "  暴君状态: " << (reg.get<JaghutTyrantComponent>(StorylineSystem::boss_raest_entity).is_sealed_in_azath ? "已封印入阿扎斯之屋" : "未封印") << "\n";
     std::cout << "========================================================================\n";
+    (void)guard;
     return 0;
 }

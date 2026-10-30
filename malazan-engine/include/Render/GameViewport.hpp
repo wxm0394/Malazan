@@ -6,6 +6,8 @@
 #include "Components/InventoryComponent.hpp"
 #include "Components/OtataralComponent.hpp"
 #include "Components/BossComponent.hpp"
+#include "Components/DragnipurComponent.hpp"
+#include "Components/FactionReputationComponent.hpp"
 #include "Items/Item.hpp"
 #include "World/DarujhistanMap.hpp"
 #include "Render/Font8x8.hpp"
@@ -18,7 +20,11 @@
 #include "Systems/FOVSystem.hpp"
 #include "Systems/OtataralSystem.hpp"
 #include "Systems/PathfindingSystem.hpp"
+#include "Systems/DragnipurSystem.hpp"
+#include "Systems/FactionSystem.hpp"
+#include "Systems/InteractionSystem.hpp"
 #include "Story/StorylineSystem.hpp"
+#include "Story/DialogueSystem.hpp"
 #include "Render/IsometricMath.hpp"
 
 #include <vector>
@@ -47,7 +53,7 @@ public:
         }
 
         m_window = SDL_CreateWindow(
-            "Malazan: Gardens of the Moon - Darujhistan Tactical Core",
+            "Malazan: Gardens of the Moon - Darujhistan Tactical Core (Phase 2)",
             m_width, m_height,
             SDL_WINDOW_RESIZABLE
         );
@@ -62,7 +68,9 @@ public:
             return false;
         }
 
-        add_log("=== 达鲁基斯坦 (Darujhistan) 战术视口已启动 ===");
+        add_log("=== 达鲁基斯坦 (Darujhistan) 战术视口已启动 [Phase 2] ===");
+        add_log("[E] 与周边 NPC (克鲁普/克罗库斯/雷克) 交谈");
+        add_log("[8/X] 凝视巨剑【德拉格尼普尔】内部死界与拉车亡魂");
         add_log("[TAB] 切换 街面 / 屋顶 立体层级视口");
         add_log("[W,A,S,D] 控制卡拉姆移动/轻功飞跃");
         add_log("[F] 切换战争迷雾 (Fog of War) 开关");
@@ -119,15 +127,72 @@ private:
     void handle_key(SDL_Keycode key, Registry& reg, DarujhistanMap& map, Entity kalam, Entity quick_ben, Entity claw) {
         bool action_took_turn = false;
 
+        // 1. 若当前正处于对话交互模态中，数字键用于选择对话分支
+        if (m_active_dialogue_npc != NULL_ENTITY) {
+            if (key == SDLK_ESCAPE || key == SDLK_E) {
+                m_active_dialogue_npc = NULL_ENTITY;
+                add_log("[对话] 结束了与 NPC 的交谈。");
+                return;
+            } else if (key == SDLK_1 || key == SDLK_KP_1) {
+                std::vector<std::string> choice_logs;
+                DialogueSystem::apply_dialogue_choice(m_active_dialogue_npc, kalam, 0, reg, choice_logs);
+                for (const auto& l : choice_logs) add_log(l);
+                m_active_dialogue_npc = NULL_ENTITY;
+                action_took_turn = true;
+            } else if (key == SDLK_2 || key == SDLK_KP_2) {
+                std::vector<std::string> choice_logs;
+                DialogueSystem::apply_dialogue_choice(m_active_dialogue_npc, kalam, 1, reg, choice_logs);
+                for (const auto& l : choice_logs) add_log(l);
+                m_active_dialogue_npc = NULL_ENTITY;
+                action_took_turn = true;
+            } else if (key == SDLK_3 || key == SDLK_KP_3) {
+                std::vector<std::string> choice_logs;
+                DialogueSystem::apply_dialogue_choice(m_active_dialogue_npc, kalam, 2, reg, choice_logs);
+                for (const auto& l : choice_logs) add_log(l);
+                m_active_dialogue_npc = NULL_ENTITY;
+                action_took_turn = true;
+            }
+            if (action_took_turn) {
+                std::vector<std::string> ai_logs;
+                AISystem::update_ai_turns(reg, map, kalam, ai_logs);
+                for (const auto& l : ai_logs) add_log(l);
+            }
+            return;
+        }
+
         switch (key) {
             case SDLK_ESCAPE: {
                 if (m_show_inventory) {
                     m_show_inventory = false;
+                } else if (m_show_dragnipur_wagon) {
+                    m_show_dragnipur_wagon = false;
                 } else {
                     SDL_Event quit_ev;
                     quit_ev.type = SDL_EVENT_QUIT;
                     SDL_PushEvent(&quit_ev);
                 }
+                break;
+            }
+
+            case SDLK_E: {
+                // 与周边 NPC 对话交互
+                Entity nearby = InteractionSystem::find_nearby_interactable(kalam, reg, 2);
+                if (nearby != NULL_ENTITY) {
+                    m_active_dialogue_npc = nearby;
+                    m_current_dialogue = DialogueSystem::get_dialogue_for(nearby, kalam, reg);
+                    add_log(">>> 与 [" + m_current_dialogue.speaker_name + "] 开启对话互动...");
+                } else {
+                    add_log("周边 2 格内没有可交互的同盟或市民 NPC。");
+                }
+                break;
+            }
+
+            case SDLK_8: case SDLK_X: {
+                // 打开/关闭 德拉格尼普尔黑剑亡魂拉车界面
+                m_show_dragnipur_wagon = !m_show_dragnipur_wagon;
+                add_log(m_show_dragnipur_wagon 
+                    ? "[太古神剑] 凝视德拉格尼普尔 (Dragnipur) 内部的纯暗大车与亡魂锁链" 
+                    : "[太古神剑] 收敛心神，目光返回达鲁基斯坦街市");
                 break;
             }
 
@@ -206,6 +271,14 @@ private:
                     std::vector<std::string> amb_logs;
                     RooftopTacticsSystem::execute_plunging_ambush(kalam, claw, reg, map, &amb_logs);
                     for (const auto& l : amb_logs) add_log(l);
+                    
+                    // 阵营声望变动结算
+                    if (!reg.get<ActorComponent>(claw).is_alive) {
+                        std::vector<std::string> f_logs;
+                        FactionSystem::on_kill(kalam, claw, reg, f_logs);
+                        for (const auto& fl : f_logs) add_log(fl);
+                    }
+
                     update_fov(reg, map, kalam);
                     action_took_turn = true;
                 } else {
@@ -335,6 +408,16 @@ private:
         // 3. 渲染行囊物品库模态抽屉
         if (m_show_inventory) {
             render_inventory_modal(reg, kalam);
+        }
+
+        // 4. 渲染 NPC 剧情对话框
+        if (m_active_dialogue_npc != NULL_ENTITY) {
+            render_dialogue_modal();
+        }
+
+        // 5. 渲染德拉格尼普尔黑剑大车囚界模态
+        if (m_show_dragnipur_wagon) {
+            render_dragnipur_modal(reg);
         }
 
         SDL_RenderPresent(m_renderer);
@@ -472,6 +555,25 @@ private:
                             color = {0.0f, 0.85f, 1.0f, 1.0f}; // 暴君太古极冰青蓝
                             glyph = 'R';
                             scale = 1.6f; // 首领体型显著更大
+                        } else if (actor.faction == Faction::PhoenixInnCircle) {
+                            if (actor.name.find("Kruppe") != std::string::npos || actor.name.find("克鲁普") != std::string::npos) {
+                                color = {0.95f, 0.75f, 0.20f, 1.0f}; // 克鲁普哲人金
+                                glyph = 'P';
+                                scale = 1.25f;
+                            } else {
+                                color = {0.85f, 0.50f, 0.20f, 1.0f}; // 克罗库斯飞贼黄铜橙
+                                glyph = 'O';
+                            }
+                        } else if (actor.faction == Faction::TisteAndii) {
+                            color = {0.20f, 0.15f, 0.35f, 1.0f}; // 雷克纯暗紫黑
+                            glyph = 'A';
+                            scale = 1.4f;
+                        } else if (actor.faction == Faction::CityAssassinsGuild) {
+                            color = {0.45f, 0.65f, 0.25f, 1.0f}; // 刺客公会暗影绿
+                            glyph = 'C';
+                        } else if (actor.faction == Faction::NeutralCivilians) {
+                            color = {0.60f, 0.65f, 0.70f, 1.0f}; // 城防军卫兵钢灰
+                            glyph = 'G';
                         }
 
                         IsometricRenderer::draw_iso_character_token(m_renderer, static_cast<float>(x), static_cast<float>(y), 
@@ -527,11 +629,11 @@ private:
 
     void render_hud(Registry& reg, Entity kalam, Entity quick_ben, Entity claw) {
         float hud_x = 880.0f;
-        float y = 35.0f;
+        float y = 30.0f;
 
         // 标题
         FontRenderer::draw_text(m_renderer, "DARUJHISTAN: CITY OF BLUE FIRE", hud_x, y, 2.2f, {230, 200, 120, 255});
-        y += 35.0f;
+        y += 34.0f;
 
         // 主线战役任务追踪指示 (Main Storyline Quest Tracker)
         SDL_FRect quest_bg{hud_x, y, 520.0f, 44.0f};
@@ -544,50 +646,68 @@ private:
         FontRenderer::draw_text(m_renderer, act_title, hud_x + 8.0f, y + 6.0f, 1.45f, {0, 229, 255, 255});
         std::string obj_text = "OBJ: " + StorylineSystem::get_current_objective();
         FontRenderer::draw_text(m_renderer, obj_text, hud_x + 8.0f, y + 24.0f, 1.2f, {220, 220, 220, 255});
-        y += 54.0f;
+        y += 52.0f;
+
+        // 阵营声望矩阵显示 (Faction Reputation Status)
+        if (reg.has<FactionReputationComponent>(kalam)) {
+            auto& rep = reg.get<FactionReputationComponent>(kalam);
+            std::string rep_str = "[REP] PHOENIX: " + std::to_string(rep.get(Faction::PhoenixInnCircle))
+                                + " | GUILD: " + std::to_string(rep.get(Faction::CityAssassinsGuild))
+                                + " | CLAW: " + std::to_string(rep.get(Faction::ImperialClaw));
+            FontRenderer::draw_text(m_renderer, rep_str, hud_x, y, 1.4f, {200, 230, 180, 255});
+            y += 20.0f;
+        }
+
+        // 附近 NPC 交互提示
+        Entity nearby = InteractionSystem::find_nearby_interactable(kalam, reg, 2);
+        if (nearby != NULL_ENTITY && reg.has<ActorComponent>(nearby)) {
+            std::string talk_prompt = ">>> [E] TALK TO: " + reg.get<ActorComponent>(nearby).name;
+            FontRenderer::draw_text(m_renderer, talk_prompt, hud_x, y, 1.45f, {255, 220, 0, 255});
+            y += 20.0f;
+        }
 
         // 当前高程与迷雾模式指示
         std::string layer_str = (m_view_elevation == ElevationLevel::Rooftop)
             ? "[TAB] VIEW: ROOFTOP (SLATE & ALLEYS)"
             : "[TAB] VIEW: STREET (COBBLESTONES & LAMPS)";
-        FontRenderer::draw_text(m_renderer, layer_str, hud_x, y, 1.6f, {0, 229, 255, 255});
-        y += 20.0f;
+        FontRenderer::draw_text(m_renderer, layer_str, hud_x, y, 1.5f, {0, 229, 255, 255});
+        y += 18.0f;
 
-        std::string fow_str = m_fog_enabled ? "[F] FOG OF WAR: ENABLED (SIGHT: 8 TILES)" : "[F] FOG OF WAR: OMNISCIENT (CHEAT)";
-        FontRenderer::draw_text(m_renderer, fow_str, hud_x, y, 1.5f, m_fog_enabled ? SDL_Color{120, 255, 150, 255} : SDL_Color{255, 180, 50, 255});
-        y += 24.0f;
+        std::string fow_str = m_fog_enabled ? "[F] FOG OF WAR: ENABLED" : "[F] FOG OF WAR: OMNISCIENT";
+        FontRenderer::draw_text(m_renderer, fow_str, hud_x, y, 1.4f, m_fog_enabled ? SDL_Color{120, 255, 150, 255} : SDL_Color{255, 180, 50, 255});
+        y += 22.0f;
 
         // 全局阿扎斯之屋威胁槽
-        FontRenderer::draw_text(m_renderer, "AZATH HOUSE AWAKENING GAUGE:", hud_x, y, 1.6f, {200, 80, 80, 255});
-        y += 20.0f;
+        FontRenderer::draw_text(m_renderer, "AZATH HOUSE AWAKENING GAUGE:", hud_x, y, 1.5f, {200, 80, 80, 255});
+        y += 18.0f;
         
         // 进度条背景
-        SDL_FRect bar_bg{hud_x, y, 520.0f, 14.0f};
+        SDL_FRect bar_bg{hud_x, y, 520.0f, 12.0f};
         SDL_SetRenderDrawColor(m_renderer, 40, 40, 40, 255);
         SDL_RenderFillRect(m_renderer, &bar_bg);
         
         // 进度条前景
         float alert_pct = std::clamp(WarrenSystem::azath_house_alertness / 100.0f, 0.0f, 1.0f);
-        SDL_FRect bar_fg{hud_x, y, 520.0f * alert_pct, 14.0f};
+        SDL_FRect bar_fg{hud_x, y, 520.0f * alert_pct, 12.0f};
         SDL_SetRenderDrawColor(m_renderer, 220, 30, 30, 255);
         SDL_RenderFillRect(m_renderer, &bar_fg);
-        y += 26.0f;
+        y += 22.0f;
 
         // 龙之塔罗命理卡片
         const auto& card = DeckOfDragonsSystem::active_card;
-        SDL_FRect tarot_bg{hud_x, y, 520.0f, 40.0f};
+        SDL_FRect tarot_bg{hud_x, y, 520.0f, 38.0f};
         SDL_SetRenderDrawColor(m_renderer, 32, 28, 20, 255);
         SDL_RenderFillRect(m_renderer, &tarot_bg);
         SDL_SetRenderDrawColor(m_renderer, 218, 165, 32, 255);
         SDL_RenderRect(m_renderer, &tarot_bg);
 
         std::string card_hdr = "[FATE CARD] " + card.title + " (" + card.patron_name + ")";
-        FontRenderer::draw_text(m_renderer, card_hdr, hud_x + 8.0f, y + 5.0f, 1.4f, {255, 215, 0, 255});
+        FontRenderer::draw_text(m_renderer, card_hdr, hud_x + 8.0f, y + 4.0f, 1.35f, {255, 215, 0, 255});
         std::string card_fx = "FX: SPELL x" + std::to_string(card.warren_power_mult).substr(0, 3)
                               + " | STEALTH x" + std::to_string(card.stealth_mult).substr(0, 3)
                               + " | BACKFIRE x" + std::to_string(card.backfire_mult).substr(0, 3);
-        FontRenderer::draw_text(m_renderer, card_fx, hud_x + 8.0f, y + 22.0f, 1.2f, {200, 200, 180, 255});
-        y += 48.0f;
+        FontRenderer::draw_text(m_renderer, card_fx, hud_x + 8.0f, y + 20.0f, 1.15f, {200, 200, 180, 255});
+        y += 44.0f;
 
         // 角色状态卡片
         auto draw_actor_stat = [&](Entity e, const std::string& title, SDL_Color color) {
@@ -597,8 +717,8 @@ private:
 
             std::string status = title + " - HP: " + std::to_string(a.hp) + "/" + std::to_string(a.max_hp)
                                  + " [" + (p.elevation == ElevationLevel::Rooftop ? "ROOF" : "STREET") + "]";
-            FontRenderer::draw_text(m_renderer, status, hud_x, y, 1.5f, color);
-            y += 20.0f;
+            FontRenderer::draw_text(m_renderer, status, hud_x, y, 1.45f, color);
+            y += 18.0f;
         };
 
         draw_actor_stat(kalam, "[K] KALAM MEKHAR", {80, 220, 100, 255});
@@ -611,36 +731,35 @@ private:
             auto& boss_c = reg.get<JaghutTyrantComponent>(StorylineSystem::boss_raest_entity);
             std::string boss_str = "[BOSS: RAEST] HP: " + std::to_string(boss_a.hp) + "/" + std::to_string(boss_a.max_hp)
                                    + " | FROST ARMOR: " + std::to_string(boss_c.frost_armor);
-            FontRenderer::draw_text(m_renderer, boss_str, hud_x, y, 1.5f, {0, 229, 255, 255});
-            y += 20.0f;
+            FontRenderer::draw_text(m_renderer, boss_str, hud_x, y, 1.45f, {0, 229, 255, 255});
+            y += 18.0f;
         }
 
-        y += 10.0f;
+        y += 6.0f;
 
         // 操作指引面板
-        FontRenderer::draw_text(m_renderer, "TACTICAL COMMANDS:", hud_x, y, 1.6f, {255, 255, 255, 255});
+        FontRenderer::draw_text(m_renderer, "TACTICAL COMMANDS:", hud_x, y, 1.55f, {255, 255, 255, 255});
         y += 18.0f;
-        FontRenderer::draw_text(m_renderer, "[W,A,S,D] 3D LEAP / MOVE | [I] INVENTORY", hud_x, y, 1.35f, {180, 180, 180, 255});
-        y += 16.0f;
+        FontRenderer::draw_text(m_renderer, "[W,A,S,D] 3D MOVE | [E] TALK NPC | [I] INVENTORY", hud_x, y, 1.35f, {180, 180, 180, 255});
+        y += 15.0f;
         FontRenderer::draw_text(m_renderer, "[1] SHADOWFIRE | [2] BURNER | [3] PLUNGE", hud_x, y, 1.35f, {180, 120, 255, 255});
-        y += 16.0f;
-        FontRenderer::draw_text(m_renderer, "[6] HEAL (DENUL) | [7] THROW CUSSER", hud_x, y, 1.35f, {255, 160, 50, 255});
-        y += 16.0f;
+        y += 15.0f;
+        FontRenderer::draw_text(m_renderer, "[6] HEAL | [7] CUSSER | [8/X] DRAGNIPUR", hud_x, y, 1.35f, {255, 160, 50, 255});
+        y += 15.0f;
         FontRenderer::draw_text(m_renderer, "[4] DECK OF DRAGONS | [5] AZATH SEAL", hud_x, y, 1.35f, {255, 215, 0, 255});
-        y += 24.0f;
+        y += 22.0f;
 
         // 战术战斗实时滚动日志
         FontRenderer::draw_text(m_renderer, "--- TACTICAL COMBAT LOG ---", hud_x, y, 1.5f, {140, 140, 140, 255});
         y += 18.0f;
 
         for (const auto& log : m_logs) {
-            FontRenderer::draw_text(m_renderer, "> " + log, hud_x, y, 1.35f, {220, 220, 220, 255});
-            y += 15.0f;
+            FontRenderer::draw_text(m_renderer, "> " + log, hud_x, y, 1.3f, {220, 220, 220, 255});
+            y += 14.0f;
         }
     }
 
     void render_inventory_modal(Registry& reg, Entity kalam) {
-        // 半透明深色背景遮罩
         SDL_FRect overlay{120.0f, 80.0f, 680.0f, 640.0f};
         SDL_SetRenderDrawColor(m_renderer, 15, 20, 28, 240);
         SDL_RenderFillRect(m_renderer, &overlay);
@@ -700,6 +819,113 @@ private:
         FontRenderer::draw_text(m_renderer, "PRESS [6] DRINK DENUL | [7] THROW CUSSER | [I/ESC] CLOSE", px, py, 1.4f, {255, 215, 0, 255});
     }
 
+    void render_dialogue_modal() {
+        SDL_FRect box{160.0f, 160.0f, 720.0f, 420.0f};
+        SDL_SetRenderDrawColor(m_renderer, 18, 22, 32, 250);
+        SDL_RenderFillRect(m_renderer, &box);
+        SDL_SetRenderDrawColor(m_renderer, 255, 215, 0, 255);
+        SDL_RenderRect(m_renderer, &box);
+
+        float dx = 190.0f;
+        float dy = 190.0f;
+
+        // 说话者与头衔
+        std::string title = "[CONVERSATION] " + m_current_dialogue.speaker_name;
+        FontRenderer::draw_text(m_renderer, title, dx, dy, 1.8f, {255, 215, 0, 255});
+        dy += 24.0f;
+        FontRenderer::draw_text(m_renderer, m_current_dialogue.speaker_title, dx, dy, 1.3f, {0, 229, 255, 255});
+        dy += 34.0f;
+
+        // 对话文本（多行按换行符拆分）
+        std::string txt = m_current_dialogue.dialogue_text;
+        size_t start = 0;
+        while (start < txt.size()) {
+            size_t end = txt.find('\n', start);
+            if (end == std::string::npos) end = txt.size();
+            std::string line = txt.substr(start, end - start);
+            FontRenderer::draw_text(m_renderer, line, dx, dy, 1.35f, {230, 230, 230, 255});
+            dy += 20.0f;
+            start = end + 1;
+        }
+
+        dy += 20.0f;
+        FontRenderer::draw_text(m_renderer, "--- CHOOSE RESPONSE ---", dx, dy, 1.4f, {180, 180, 180, 255});
+        dy += 24.0f;
+
+        // 选项列表
+        for (const auto& opt : m_current_dialogue.options) {
+            FontRenderer::draw_text(m_renderer, opt, dx, dy, 1.35f, {255, 230, 120, 255});
+            dy += 24.0f;
+        }
+
+        dy += 16.0f;
+        FontRenderer::draw_text(m_renderer, "PRESS [1, 2, 3] TO SELECT | [E/ESC] EXIT", dx, dy, 1.3f, {150, 150, 150, 255});
+    }
+
+    void render_dragnipur_modal(Registry& reg) {
+        SDL_FRect box{140.0f, 100.0f, 760.0f, 580.0f};
+        SDL_SetRenderDrawColor(m_renderer, 10, 8, 16, 250);
+        SDL_RenderFillRect(m_renderer, &box);
+        SDL_SetRenderDrawColor(m_renderer, 180, 160, 220, 255);
+        SDL_RenderRect(m_renderer, &box);
+
+        float dx = 170.0f;
+        float dy = 130.0f;
+
+        FontRenderer::draw_text(m_renderer, "=== DRAGNIPUR: THE WAGON OF DARKNESS ===", dx, dy, 1.8f, {210, 180, 255, 255});
+        dy += 28.0f;
+        FontRenderer::draw_text(m_renderer, "Elder Sword forged by Draconus | Gate of Kurald Galain", dx, dy, 1.35f, {140, 120, 180, 255});
+        dy += 34.0f;
+
+        // 查找持有 Dragnipur 的实体（如雷克）
+        bool found = false;
+        for (auto [ent, drag, actor] : reg.view<DragnipurComponent, ActorComponent>()) {
+            found = true;
+            std::string bearer = "SWORD BEARER: " + actor.name;
+            FontRenderer::draw_text(m_renderer, bearer, dx, dy, 1.5f, {255, 215, 0, 255});
+            dy += 26.0f;
+
+            // 混沌追逐距离指示
+            FontRenderer::draw_text(m_renderer, "DISTANCE FROM CHAOS (SAFETY MARGIN):", dx, dy, 1.45f, {255, 100, 100, 255});
+            dy += 18.0f;
+
+            SDL_FRect c_bg{dx, dy, 680.0f, 14.0f};
+            SDL_SetRenderDrawColor(m_renderer, 40, 30, 45, 255);
+            SDL_RenderFillRect(m_renderer, &c_bg);
+
+            float c_pct = std::clamp(drag.chaos_pursuit_distance / 100.0f, 0.0f, 1.0f);
+            SDL_FRect c_fg{dx, dy, 680.0f * c_pct, 14.0f};
+            SDL_SetRenderDrawColor(m_renderer, 160, 60, 240, 255);
+            SDL_RenderFillRect(m_renderer, &c_fg);
+            dy += 24.0f;
+
+            std::string p_info = "TOTAL WAGON PULL POWER: " + std::to_string(drag.get_total_pull_power()).substr(0, 5)
+                                 + " | WAGON WEIGHT: " + std::to_string(drag.wagon_weight).substr(0, 5);
+            FontRenderer::draw_text(m_renderer, p_info, dx, dy, 1.4f, {200, 200, 240, 255});
+            dy += 32.0f;
+
+            FontRenderer::draw_text(m_renderer, "[ENCHAINED SOULS PULLING THE WAGON]:", dx, dy, 1.55f, {0, 229, 255, 255});
+            dy += 24.0f;
+
+            for (size_t i = 0; i < drag.trapped_souls.size(); ++i) {
+                const auto& s = drag.trapped_souls[i];
+                std::string s_line = "[" + std::to_string(i + 1) + "] " + s.name 
+                                     + " (POWER: " + std::to_string(s.combat_power) 
+                                     + " | PULL STR: " + std::to_string(s.pull_effort).substr(0, 4) + ")";
+                FontRenderer::draw_text(m_renderer, s_line, dx + 10.0f, dy, 1.35f, {220, 220, 220, 255});
+                dy += 20.0f;
+            }
+            break;
+        }
+
+        if (!found) {
+            FontRenderer::draw_text(m_renderer, "Dragnipur is currently sleeping in the shadows.", dx, dy, 1.4f, {160, 160, 160, 255});
+        }
+
+        dy += 30.0f;
+        FontRenderer::draw_text(m_renderer, "PRESS [8/X/ESC] TO CLOSE WAGON VIEW", dx, dy, 1.4f, {255, 215, 0, 255});
+    }
+
     int m_width;
     int m_height;
     SDL_Window* m_window{nullptr};
@@ -709,6 +935,11 @@ private:
     std::vector<VisibilityState> m_fog_grid;
     bool m_fog_enabled{true};
     bool m_show_inventory{false};
+
+    // Phase 2 新增：NPC 剧情交互与德拉格尼普尔状态
+    Entity m_active_dialogue_npc{NULL_ENTITY};
+    DialogueNode m_current_dialogue;
+    bool m_show_dragnipur_wagon{false};
 };
 
 } // namespace Malazan

@@ -5,6 +5,8 @@
 #include "Components/AIComponent.hpp"
 #include "Components/InventoryComponent.hpp"
 #include "Components/OtataralComponent.hpp"
+#include "Components/DragnipurComponent.hpp"
+#include "Components/FactionReputationComponent.hpp"
 #include "Items/Item.hpp"
 #include "Core/json.hpp"
 
@@ -193,10 +195,27 @@ public:
                             .deaden_intensity = 1.0f,
                             .is_active = true
                         });
+
+                        reg.emplace<FactionReputationComponent>(ent, FactionReputationComponent{});
                     } else if (template_id == "quick_ben") {
                         InventoryComponent inv;
                         inv.add_item(ItemFactory::create_denul_draught());
                         reg.emplace<InventoryComponent>(ent, std::move(inv));
+                    } else if (template_id == "anomander_rake") {
+                        DragnipurComponent drag;
+                        drag.trapped_souls.push_back(TrappedSoul{
+                            .name = "远古纯血巨龙·埃雷恩特 (Eleint Pureblood)",
+                            .former_faction = Faction::NeutralCivilians,
+                            .combat_power = 600,
+                            .pull_effort = 12.0f
+                        });
+                        drag.trapped_souls.push_back(TrappedSoul{
+                            .name = "领主级高等恶魔·佩尔 (Demon Lord Pearl)",
+                            .former_faction = Faction::NeutralCivilians,
+                            .combat_power = 320,
+                            .pull_effort = 6.0f
+                        });
+                        reg.emplace<DragnipurComponent>(ent, std::move(drag));
                     }
 
                     return ent;

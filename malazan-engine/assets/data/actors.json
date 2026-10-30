@@ -71,6 +71,69 @@
         "Rashan": 95.0,
         "Thyr": 70.0
       }
+    },
+    {
+      "id": "kruppe",
+      "name": "克鲁普 (Kruppe - 凤凰客栈大梦哲人)",
+      "faction": "PhoenixInnCircle",
+      "hp": 160,
+      "max_hp": 160,
+      "speed": 1000,
+      "can_climb_roofs": false,
+      "rooftop_jump_range": 0,
+      "max_safe_stress": 200.0,
+      "warren_affinities": {
+        "Meanas": 99.0,
+        "Denul": 80.0
+      }
+    },
+    {
+      "id": "crokus",
+      "name": "克罗库斯·幼手 (Crokus Younghand - 达鲁基斯坦飞贼)",
+      "faction": "PhoenixInnCircle",
+      "hp": 100,
+      "max_hp": 100,
+      "speed": 1400,
+      "can_climb_roofs": true,
+      "rooftop_jump_range": 4,
+      "stealth_power": 90.0
+    },
+    {
+      "id": "anomander_rake",
+      "name": "阿诺曼德·雷克 (Anomander Rake - 漂浮城之主·黑夜之子)",
+      "faction": "TisteAndii",
+      "hp": 650,
+      "max_hp": 650,
+      "speed": 1500,
+      "can_climb_roofs": true,
+      "rooftop_jump_range": 6,
+      "max_safe_stress": 300.0,
+      "warren_affinities": {
+        "KuraldGalain": 100.0,
+        "Tellann": 75.0
+      }
+    },
+    {
+      "id": "city_watch_guard",
+      "name": "达鲁基斯坦城防军卫兵 (City Watch Guardsman)",
+      "faction": "NeutralCivilians",
+      "hp": 130,
+      "max_hp": 130,
+      "speed": 900,
+      "can_climb_roofs": false,
+      "rooftop_jump_range": 0,
+      "ai": {
+        "sight_range": 6,
+        "hearing_range": 7,
+        "attack_range": 1,
+        "attack_power": 24,
+        "patrol_waypoints": [
+          [2, 4],
+          [2, 10],
+          [6, 10],
+          [6, 4]
+        ]
+      }
     }
   ]
 }
