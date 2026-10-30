@@ -3,6 +3,9 @@
 #include "Core/ECS.hpp"
 #include "Components/Components.hpp"
 #include "Components/AIComponent.hpp"
+#include "Components/InventoryComponent.hpp"
+#include "Components/OtataralComponent.hpp"
+#include "Items/Item.hpp"
 #include "Core/json.hpp"
 
 #include <fstream>
@@ -173,6 +176,29 @@ public:
                     }
 
                     reg.emplace<TacticalElevationComponent>(ent, TacticalElevationComponent{});
+
+                    // 默认专属战术装备库加载
+                    if (template_id == "kalam_mekhar") {
+                        InventoryComponent inv;
+                        inv.equipped_main_hand = ItemFactory::create_otataral_dagger();
+                        inv.equipped_off_hand = ItemFactory::create_bridgeburner_blade();
+                        inv.add_item(ItemFactory::create_moranth_burner());
+                        inv.add_item(ItemFactory::create_moranth_sharper());
+                        inv.add_item(ItemFactory::create_moranth_cusser());
+                        inv.add_item(ItemFactory::create_denul_draught());
+                        reg.emplace<InventoryComponent>(ent, std::move(inv));
+
+                        reg.emplace<OtataralComponent>(ent, OtataralComponent{
+                            .radius = 3.5f,
+                            .deaden_intensity = 1.0f,
+                            .is_active = true
+                        });
+                    } else if (template_id == "quick_ben") {
+                        InventoryComponent inv;
+                        inv.add_item(ItemFactory::create_denul_draught());
+                        reg.emplace<InventoryComponent>(ent, std::move(inv));
+                    }
+
                     return ent;
                 }
             }

@@ -241,6 +241,49 @@ public:
         SDL_SetRenderDrawColor(renderer, 240, 255, 255, 255);
         SDL_RenderFillRect(renderer, &flame_hotspot);
     }
+
+    // 绘制奥塔拉尔（Otataral）反魔力场绝死光环 (生锈赭红微光脉冲)
+    static void draw_iso_otataral_field(
+        SDL_Renderer* renderer,
+        float gx, float gy, float gz,
+        float origin_x, float origin_y,
+        float radius,
+        float pulse
+    ) {
+        SDL_FPoint ground = world_to_screen(gx, gy, gz, origin_x, origin_y);
+
+        float r_screen = (radius * TILE_W * 0.65f) + 2.0f * std::sin(pulse * 3.5f);
+        SDL_FColor center_col{0.80f, 0.30f, 0.10f, 0.35f}; // 赭红死域核心
+        SDL_FColor edge_col{0.60f, 0.20f, 0.05f, 0.0f};    // 边缘消散
+
+        constexpr int SEGMENTS = 16;
+        std::vector<SDL_Vertex> verts;
+        verts.push_back({ground, center_col, {0,0}});
+        for (int i = 0; i <= SEGMENTS; ++i) {
+            float angle = (i * 2.0f * 3.14159f) / SEGMENTS;
+            float px = ground.x + std::cos(angle) * r_screen;
+            float py = ground.y + std::sin(angle) * (r_screen * 0.5f); // 2:1 椭圆
+            verts.push_back({{px, py}, edge_col, {0,0}});
+        }
+        std::vector<int> idx;
+        for (int i = 1; i <= SEGMENTS; ++i) {
+            idx.push_back(0);
+            idx.push_back(i);
+            idx.push_back(i + 1);
+        }
+        SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()), 
+                           idx.data(), static_cast<int>(idx.size()));
+
+        // 赭红铁锈外圈光芒
+        SDL_SetRenderDrawColor(renderer, 210, 80, 30, 160);
+        for (int i = 0; i < SEGMENTS; ++i) {
+            float a1 = (i * 2.0f * 3.14159f) / SEGMENTS;
+            float a2 = ((i + 1) * 2.0f * 3.14159f) / SEGMENTS;
+            SDL_RenderLine(renderer, 
+                           ground.x + std::cos(a1) * r_screen, ground.y + std::sin(a1) * (r_screen * 0.5f),
+                           ground.x + std::cos(a2) * r_screen, ground.y + std::sin(a2) * (r_screen * 0.5f));
+        }
+    }
 };
 
 } // namespace Malazan

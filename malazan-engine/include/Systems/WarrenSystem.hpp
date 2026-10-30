@@ -1,11 +1,13 @@
 #pragma once
 #include "Core/ECS.hpp"
 #include "Components/Components.hpp"
+#include "Components/BossComponent.hpp"
+#include "Systems/OtataralSystem.hpp"
 #include <iostream>
 #include <format>
 #include <random>
-
-#include "Components/BossComponent.hpp"
+#include <vector>
+#include <string>
 
 namespace Malazan {
 
@@ -24,7 +26,8 @@ public:
         Registry& reg,
         const std::string& spell_name,
         const std::vector<SpellWeaveNode>& weave,
-        Vec2i target_coord
+        Vec2i target_coord,
+        std::vector<std::string>* out_logs = nullptr
     ) {
         if (!reg.has<WarrenChannelerComponent>(caster) || !reg.has<ActorComponent>(caster)) {
             return false;
@@ -33,7 +36,19 @@ public:
         auto& channeler = reg.get<WarrenChannelerComponent>(caster);
         auto& actor = reg.get<ActorComponent>(caster);
 
-        std::cout << "\n>>> [沃伦施法] " << actor.name << " 开始引导复合术式: 【" << spell_name << "】\n";
+        auto log_msg = [&](const std::string& s) {
+            std::cout << s << "\n";
+            if (out_logs) out_logs->push_back(s);
+        };
+
+        log_msg(">>> [沃伦施法] " + actor.name + " 开始引导复合术式: 【" + spell_name + "】");
+
+        // 0. 奥塔拉尔反魔力场压制与扼杀检定
+        std::vector<std::string> ota_logs;
+        if (OtataralSystem::check_and_suppress_spell(caster, target_coord, reg, ota_logs)) {
+            for (const auto& l : ota_logs) log_msg("  " + l);
+            return false; // 法门通道被完全扑灭
+        }
 
         float total_stress = 0.0f;
 
@@ -41,7 +56,7 @@ public:
         for (const auto& node : weave) {
             float affinity = channeler.get_affinity(node.warren);
             if (affinity <= 0.0f) {
-                std::cout << "    [失败] " << actor.name << " 无法感知或触碰未契约的沃伦通道!\n";
+                log_msg("    [失败] " + actor.name + " 无法感知或触碰未契约的沃伦通道!");
                 return false;
             }
 
@@ -50,47 +65,57 @@ public:
             float stress_cost = node.intensity * (1.2f - efficiency * 0.5f);
             total_stress += stress_cost;
 
-            std::cout << "    * 抽取沃伦 [" << static_cast<int>(node.warren) 
-                      << "] 强度: " << node.intensity 
-                      << " (亲和度: " << affinity << "%)\n";
+            log_msg("    * 抽取沃伦通道强度: " + std::to_string(node.intensity).substr(0, 4) 
+                    + " (亲和度: " + std::to_string(affinity).substr(0, 4) + "%)");
         }
 
         channeler.current_stress += total_stress;
         
         // 全局阿扎斯监测累加（剧烈的法术回响向地脉深处蔓延）
         azath_house_alertness += total_stress * 0.12f;
-        std::cout << "    * 施法压力 +" << total_stress 
-                  << " (当前身体负荷: " << channeler.current_stress << "/" << channeler.max_safe_stress << ")\n"
-                  << "    * 达鲁基斯坦地脉异动: 阿扎斯警觉度上升至 " << azath_house_alertness << "%\n";
+        log_msg("    * 施法压力 +" + std::to_string(total_stress).substr(0, 4) 
+                + " (当前负荷: " + std::to_string(channeler.current_stress).substr(0, 4) + "/" 
+                + std::to_string(channeler.max_safe_stress).substr(0, 4) + ")");
+        log_msg("    * 达鲁基斯坦地脉异动: 阿扎斯警觉度上升至 " + std::to_string(azath_house_alertness).substr(0, 4) + "%");
 
         // 反噬过载检定
         if (channeler.current_stress > channeler.max_safe_stress) {
-            trigger_overdraw_backfire(caster, actor, channeler);
+            trigger_overdraw_backfire(caster, actor, channeler, out_logs);
         }
 
         // 命中与伤害结算
-        resolve_spell_impact(reg, spell_name, weave, target_coord);
+        resolve_spell_impact(reg, spell_name, weave, target_coord, out_logs);
 
         return true;
     }
 
 private:
-    static void trigger_overdraw_backfire(Entity ent, ActorComponent& actor, WarrenChannelerComponent& channeler) {
+    static void trigger_overdraw_backfire(
+        Entity ent, 
+        ActorComponent& actor, 
+        WarrenChannelerComponent& channeler,
+        std::vector<std::string>* out_logs
+    ) {
         (void)ent;
         float overflow = channeler.current_stress - channeler.max_safe_stress;
-        std::cout << "    [警告!] 沃伦通道过载反噬! 溢出量: " << overflow << "\n";
+        auto log_msg = [&](const std::string& s) {
+            std::cout << s << "\n";
+            if (out_logs) out_logs->push_back(s);
+        };
+
+        log_msg("    [警告!] 沃伦通道过载反噬! 溢出量: " + std::to_string(overflow).substr(0, 4));
 
         static std::mt19937 rng(42);
         std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
         if (dist(rng) < (overflow * 0.03f)) {
             int32_t chaos_dmg = static_cast<int32_t>(overflow * 1.5f);
-            std::cout << "    [反噬灾难!] 现实空间被撕裂，混沌能量灼烧法师神经! " 
-                      << actor.name << " 承受 " << chaos_dmg << " 点真实混沌伤害!\n";
+            log_msg("    [反噬灾难!] 现实空间被撕裂，混沌能量灼烧法师神经! " 
+                    + actor.name + " 承受 " + std::to_string(chaos_dmg) + " 点真实混沌伤害!");
             actor.take_damage(chaos_dmg, DamageType::ChaosDisruption);
             channeler.chaos_corruption += 15.0f;
         } else {
-            std::cout << "    [微度震颤] 脉轮过热，法门暂时出现啸鸣。\n";
+            log_msg("    [微度震颤] 脉轮过热，法门暂时出现啸鸣。");
         }
     }
 
@@ -98,9 +123,15 @@ private:
         Registry& reg, 
         const std::string& spell_name,
         const std::vector<SpellWeaveNode>& weave,
-        Vec2i target_coord
+        Vec2i target_coord,
+        std::vector<std::string>* out_logs
     ) {
         (void)spell_name;
+        auto log_msg = [&](const std::string& s) {
+            std::cout << s << "\n";
+            if (out_logs) out_logs->push_back(s);
+        };
+
         // 查找落在目标坐标处的受害者
         for (auto [target_ent, pos, target_actor] : reg.view<PositionComponent, ActorComponent>()) {
             if (pos.coord == target_coord && target_actor.is_alive) {
@@ -110,18 +141,18 @@ private:
                     total_dmg += static_cast<int32_t>(node.intensity * 1.2f);
                 }
 
-                std::cout << "    => 命中目标 [" << target_actor.name << "] 于坐标 (" 
-                          << target_coord.x << ", " << target_coord.y << ")! 造成 " 
-                          << total_dmg << " 点综合沃伦杀伤!\n";
+                log_msg("    => 命中目标 [" + target_actor.name + "] 于坐标 (" 
+                        + std::to_string(target_coord.x) + ", " + std::to_string(target_coord.y) + ")! 造成 " 
+                        + std::to_string(total_dmg) + " 点综合沃伦杀伤!");
                 
                 if (reg.has<JaghutTyrantComponent>(target_ent)) {
                     auto& tyrant = reg.get<JaghutTyrantComponent>(target_ent);
                     if (tyrant.frost_armor > 0) {
                         tyrant.frost_armor -= total_dmg;
-                        std::cout << "       [坚冰护甲吸收] 暴君的 Omtose 冰晶护甲吸收伤害! 护甲剩余: " 
-                                  << std::max(0, tyrant.frost_armor) << "\n";
+                        log_msg("       [坚冰护甲吸收] 暴君的 Omtose 冰晶护甲吸收伤害! 护甲剩余: " 
+                                + std::to_string(std::max(0, tyrant.frost_armor)));
                         if (tyrant.frost_armor <= 0) {
-                            std::cout << "       【暴君护甲爆碎!】雷斯特发出惊天怒吼，本体暴露在炽热蓝火之下!\n";
+                            log_msg("       【暴君护甲爆碎!】雷斯特发出惊天怒吼，本体暴露在炽热蓝火之下!");
                         }
                     } else {
                         target_actor.take_damage(total_dmg, DamageType::WarrenFire);
@@ -129,7 +160,7 @@ private:
                 } else {
                     target_actor.take_damage(total_dmg, DamageType::WarrenFire);
                 }
-                std::cout << "       [" << target_actor.name << "] 剩余生命值: " << target_actor.hp << "\n";
+                log_msg("       [" + target_actor.name + "] 剩余生命值: " + std::to_string(target_actor.hp));
             }
         }
     }

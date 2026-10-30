@@ -2,16 +2,21 @@
 #include "Core/ECS.hpp"
 #include "Components/Components.hpp"
 #include "Components/AIComponent.hpp"
+#include "Components/OtataralComponent.hpp"
+#include "Components/InventoryComponent.hpp"
 #include "World/DarujhistanMap.hpp"
 #include "Systems/DeckOfDragonsSystem.hpp"
+#include "Systems/PathfindingSystem.hpp"
+#include "Systems/OtataralSystem.hpp"
 #include <iostream>
 #include <cmath>
+#include <random>
 
 namespace Malazan {
 
 class AISystem {
 public:
-    // 执行所有 AI 实体的自主战术决策回合
+    // 执行所有 AI 实体的自主战术决策回合（基于 3D A* 空间寻路与感知状态机）
     static void update_ai_turns(
         Registry& reg,
         DarujhistanMap& map,
@@ -56,12 +61,12 @@ public:
                 ai_comp.target_interest_pos = player_pos.coord;
                 ai_comp.alert_meter = 100.0f;
             } else if (dist_to_player <= ai_comp.hearing_range && ai_comp.state == AIBehaviorState::Patrol) {
-                // 听到动静，进入怀疑调查状态
+                // 听到刺杀动静或爆炸声，进入怀疑调查状态
                 ai_comp.state = AIBehaviorState::Suspicious;
                 ai_comp.target_interest_pos = player_pos.coord;
             }
 
-            // 2. 行为执行
+            // 2. 行为执行 (结合 3D A* 避障与立体穿插)
             if (ai_comp.state == AIBehaviorState::Combat) {
                 // 若已处于攻击射程内
                 if (dist_to_player <= ai_comp.attack_range) {
@@ -70,9 +75,17 @@ public:
                     continue;
                 }
 
-                // 否则全速向目标寻路靠近
-                step_towards(pos, ai_comp.target_interest_pos, map, pos.elevation);
-                out_logs.push_back("[" + actor.name + "] 握紧浸毒刃，向目标逼近!");
+                // 否则调用 3D A* 寻路避开建筑物死角与障碍，全速逼近
+                PathNode start{pos.coord, pos.elevation};
+                PathNode goal{player_pos.coord, player_pos.elevation};
+                auto path = PathfindingSystem::find_path(start, goal, map, pos.can_climb_roofs);
+
+                if (path.size() >= 2) {
+                    pos.coord = path[1].pos;
+                    pos.elevation = path[1].elev;
+                    out_logs.push_back("[" + actor.name + "] 施展暗影步沿巷道绕行逼近 (" 
+                                       + std::to_string(pos.coord.x) + "," + std::to_string(pos.coord.y) + ")");
+                }
                 energy.consume(1000);
 
             } else if (ai_comp.state == AIBehaviorState::Suspicious) {
@@ -81,7 +94,13 @@ public:
                     ai_comp.state = AIBehaviorState::Patrol;
                     ai_comp.alert_meter = 0.0f;
                 } else {
-                    step_towards(pos, ai_comp.target_interest_pos, map, pos.elevation);
+                    PathNode start{pos.coord, pos.elevation};
+                    PathNode goal{ai_comp.target_interest_pos, pos.elevation};
+                    auto path = PathfindingSystem::find_path(start, goal, map, pos.can_climb_roofs);
+                    if (path.size() >= 2) {
+                        pos.coord = path[1].pos;
+                        pos.elevation = path[1].elev;
+                    }
                     energy.consume(1000);
                 }
             } else if (ai_comp.state == AIBehaviorState::Patrol) {
@@ -91,7 +110,13 @@ public:
                     if (pos.coord == target_wp) {
                         ai_comp.current_waypoint_idx = (ai_comp.current_waypoint_idx + 1) % ai_comp.patrol_waypoints.size();
                     } else {
-                        step_towards(pos, target_wp, map, pos.elevation);
+                        PathNode start{pos.coord, pos.elevation};
+                        PathNode goal{target_wp, pos.elevation};
+                        auto path = PathfindingSystem::find_path(start, goal, map, pos.can_climb_roofs);
+                        if (path.size() >= 2) {
+                            pos.coord = path[1].pos;
+                            pos.elevation = path[1].elev;
+                        }
                     }
                 }
                 energy.consume(1000);
@@ -112,6 +137,14 @@ private:
 
         int32_t dmg = atk_comp.attack_power;
 
+        // 奥塔拉尔力场对暗影法术附魔攻击的压制检定
+        float intensity = 0.0f;
+        auto& target_pos = reg.get<PositionComponent>(target);
+        if (OtataralSystem::is_suppressed_at(target_pos.coord, target_pos.elevation, reg, &intensity)) {
+            dmg = static_cast<int32_t>(dmg * (1.0f - 0.4f * intensity));
+            out_logs.push_back("【奥塔拉尔压制!】目标的生锈死域弱化了 [" + atk_actor.name + "] 的暗影淬毒效果!");
+        }
+
         // 奥彭命运判定 (Oponn Gamble)
         if (DeckOfDragonsSystem::active_card.oponn_gamble_chance > 0.0f) {
             static std::mt19937 rng(999);
@@ -124,30 +157,7 @@ private:
 
         vic_actor.take_damage(dmg, DamageType::PhysicalPierce);
         out_logs.push_back(">>> [" + atk_actor.name + "] 投射淬毒暗影刃，刺伤 [" 
-                           + vic_actor.name + "]！造成 " + std::to_string(dmg) + " 点破甲伤害！");
-    }
-
-    static void step_towards(PositionComponent& pos, Vec2i target, DarujhistanMap& map, ElevationLevel elev) {
-        int32_t dx = target.x - pos.coord.x;
-        int32_t dy = target.y - pos.coord.y;
-
-        Vec2i next_step = pos.coord;
-
-        // 优先在距离更大的轴上走一格
-        if (std::abs(dx) > std::abs(dy)) {
-            next_step.x += (dx > 0 ? 1 : -1);
-        } else if (dy != 0) {
-            next_step.y += (dy > 0 ? 1 : -1);
-        } else if (dx != 0) {
-            next_step.x += (dx > 0 ? 1 : -1);
-        }
-
-        if (map.in_bounds(next_step)) {
-            const auto& cell = map.get_cell(next_step, elev);
-            if (!cell.blocks_movement) {
-                pos.coord = next_step;
-            }
-        }
+                           + vic_actor.name + "]！造成 " + std::to_string(dmg) + " 点伤害！");
     }
 };
 
