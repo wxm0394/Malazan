@@ -1,0 +1,40 @@
+# C++ Build artifacts
+build/
+bin/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+compile_commands.json
+.cache/
+malazan-engine/build/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+*.zip
+
+# Node / Frontend
+node_modules/
+dist/
+.env.local
+.env.*.local
+
+# Editor & OS
+*.swp
+*.swo
+.*.swp
+*.kate-swp
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Large Book files (Avoid DMCA on GitHub)
+*.pdf
+*.epub

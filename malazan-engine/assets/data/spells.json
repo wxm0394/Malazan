@@ -1,0 +1,54 @@
+{
+  "spells": [
+    {
+      "id": "shadowfire_tempest",
+      "name": "暗影灼热风暴 (Shadowfire Tempest)",
+      "description": "快班自创复合术式，结合火之沃伦的破坏力与阴影沃伦的腐蚀，降低敌方视野。",
+      "cooldown": 4,
+      "range": 6,
+      "weave": [
+        { "warren": "Telas", "intensity": 35.0 },
+        { "warren": "Rashan", "intensity": 25.0 }
+      ],
+      "damage": 75,
+      "damage_type": "WarrenFire"
+    },
+    {
+      "id": "wave_of_tellann",
+      "name": "提兰太古火浪 (Wave of Tellann)",
+      "description": "提兰·伊玛斯远古死火，可瞬间熔化金属与石材，引起阿扎斯强烈警觉。",
+      "cooldown": 7,
+      "range": 5,
+      "weave": [
+        { "warren": "Tellann", "intensity": 55.0 }
+      ],
+      "damage": 110,
+      "damage_type": "WarrenFire"
+    },
+    {
+      "id": "rashan_veil",
+      "name": "暗影斗篷 (Rashan Veil)",
+      "description": "抽取阴影沃伦遮蔽形体与气味，强行进入绝对潜行状态。",
+      "cooldown": 5,
+      "range": 0,
+      "weave": [
+        { "warren": "Rashan", "intensity": 30.0 }
+      ],
+      "damage": 0,
+      "damage_type": "WarrenDarkness"
+    },
+    {
+      "id": "denul_restoration",
+      "name": "德努尔复苏术 (Denul Restoration)",
+      "description": "引导纯净生命之泉愈合撕裂伤与碎骨，稳定身体沃伦负荷。",
+      "cooldown": 6,
+      "range": 3,
+      "weave": [
+        { "warren": "Denul", "intensity": 40.0 }
+      ],
+      "heal": 65,
+      "damage": 0,
+      "damage_type": "WarrenFire"
+    }
+  ]
+}
