@@ -134,6 +134,32 @@
           [6, 4]
         ]
       }
+    },
+    {
+      "id": "tlan_imass_warrior",
+      "name": "提兰·伊玛斯古冢武士 (T'lan Imass Warrior)",
+      "faction": "NeutralCivilians",
+      "hp": 260,
+      "max_hp": 260,
+      "speed": 1000,
+      "can_climb_roofs": true,
+      "rooftop_jump_range": 2,
+      "max_safe_stress": 150.0,
+      "warren_affinities": {
+        "Tellann": 95.0
+      },
+      "ai": {
+        "sight_range": 8,
+        "hearing_range": 9,
+        "attack_range": 2,
+        "attack_power": 45,
+        "patrol_waypoints": [
+          [8, 6],
+          [14, 6],
+          [14, 10],
+          [8, 10]
+        ]
+      }
     }
   ]
 }

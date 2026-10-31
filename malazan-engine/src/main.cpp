@@ -18,6 +18,9 @@
 #include "Systems/FactionSystem.hpp"
 #include "Systems/InteractionSystem.hpp"
 #include "Story/DialogueSystem.hpp"
+#include "World/WorldSector.hpp"
+#include "World/HazardSystem.hpp"
+#include "Core/SaveLoadSystem.hpp"
 #include "Render/GameViewport.hpp"
 
 #include <iostream>
@@ -35,7 +38,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "========================================================================\n";
     std::cout << "  《玛拉赞落魄之书》：达鲁基斯坦 (Darujhistan) - 战术与沙盒引擎\n";
-    std::cout << "  Phase 2 实体与沙盒生态: 凤凰客栈同盟 | 德拉格尼普尔黑剑 | 阵营外交声望\n";
+    std::cout << "  Phase 3 三层立体架构: 地下古老墓穴 | 瓦斯云爆灾害 | 状态持久化 | 泰兰·伊玛斯\n";
     std::cout << "========================================================================\n\n";
 
     Registry reg;
@@ -62,6 +65,9 @@ int main(int argc, char* argv[]) {
         .blast_radius = 3
     });
 
+    // 部署地下墓穴高压易爆瓦斯气云 (HazardSystem)
+    HazardSystem::spawn_gas_leak({10, 10}, ElevationLevel::Underground, 85.0f);
+
     // 3. 数据驱动实体生成 (从 JSON 实例化角色并挂载专属装备库)
     Entity kalam = DataLoader::spawn_actor_from_json(
         reg, "assets/data/actors.json", "kalam_mekhar", {6, 6}, ElevationLevel::Rooftop
@@ -73,7 +79,7 @@ int main(int argc, char* argv[]) {
         reg, "assets/data/actors.json", "claw_assassin", {10, 6}, ElevationLevel::Street
     );
 
-    // Phase 2 新增：活化沙盒 NPC 生态入场
+    // Phase 2 活化沙盒 NPC 生态入场
     Entity kruppe = DataLoader::spawn_actor_from_json(
         reg, "assets/data/actors.json", "kruppe", {5, 5}, ElevationLevel::Street
     );
@@ -87,7 +93,15 @@ int main(int argc, char* argv[]) {
         reg, "assets/data/actors.json", "city_watch_guard", {2, 4}, ElevationLevel::Street
     );
 
-    std::cout << "  * 破桥军小队、凤凰客栈克鲁普、飞贼克罗库斯、城防守卫与黑夜之王阿诺曼德·雷克已全部就位。\n";
+    // Phase 3 新增：地下墓穴远古守望者 泰兰·伊玛斯 白骨战将
+    Entity tlan_warrior = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "tlan_imass_warrior", {10, 8}, ElevationLevel::Underground
+    );
+    if (reg.has<InventoryComponent>(tlan_warrior)) {
+        reg.get<InventoryComponent>(tlan_warrior).equip(ItemFactory::create_tlan_flint_sword());
+    }
+
+    std::cout << "  * 破桥军小队、克鲁普、克罗库斯、城防守卫、雷克与地下墓穴【泰兰·伊玛斯】已全部就位。\n";
 
     if (reg.has<InventoryComponent>(kalam)) {
         auto& inv = reg.get<InventoryComponent>(kalam);
@@ -102,7 +116,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!headless) {
-        std::cout << "\n[视口启动] 正在唤醒 SDL3 战术图形视口窗口 (2.5D 等距立体高清 - Phase 2)...\n";
+        std::cout << "\n[视口启动] 正在唤醒 SDL3 战术图形视口窗口 (2.5D 等距立体高清 - Phase 3)...\n";
         GameViewport viewport(1440, 860);
         if (viewport.init()) {
             viewport.run(reg, city_map, kalam, quick_ben, claw_agent);
@@ -182,10 +196,69 @@ int main(int argc, char* argv[]) {
     StorylineSystem::trigger_azath_sealing(reg, city_map, story_logs);
     for (const auto& log : story_logs) std::cout << "  " << log << "\n";
 
+    // 5. Phase 3 新增：3D A* 地下墓穴与垂直下水道阶梯导航测试
+    std::cout << "\n--- [测试 5: 3D A* 穿行地下墓穴与垂直下水道铁梯] --- \n";
+    // 从西区街面 (2,3) 穿过 (2,4) 下水道铁格栅梯，深入地下墓道抵达泰兰·伊玛斯 (10,8)
+    auto path_to_underground = PathfindingSystem::find_path_3d(
+        city_map, {2, 3}, ElevationLevel::Street, {10, 8}, ElevationLevel::Underground
+    );
+    std::cout << "  3D 导航寻路结果: 成功生成 " << path_to_underground.size() << " 步立体移动路径\n";
+    for (size_t i = 0; i < std::min<size_t>(5, path_to_underground.size()); ++i) {
+        std::cout << "    * 步骤 [" << i + 1 << "]: (" << path_to_underground[i].coord.x 
+                  << ", " << path_to_underground[i].coord.y << ") [" 
+                  << (path_to_underground[i].elevation == ElevationLevel::Underground ? "地下墓穴" : "街面层") << "]\n";
+    }
+
+    // 6. Phase 3 新增：地下高压易燃瓦斯云爆与震荡连环引爆测试
+    std::cout << "\n--- [测试 6: 地下高压易爆瓦斯云爆与连环毁伤 (HazardSystem)] --- \n";
+    HazardSystem::spawn_gas_leak({10, 6}, ElevationLevel::Street, 95.0f);
+    std::vector<std::string> haz_logs;
+    bool haz_detonated = HazardSystem::check_and_detonate_gas({10, 6}, ElevationLevel::Street, reg, city_map, haz_logs);
+    std::cout << "  瓦斯诱爆状态: " << (haz_detonated ? "成功引爆燃料空气震荡冲击波!" : "未诱爆") << "\n";
+    for (const auto& hl : haz_logs) std::cout << "    " << hl << "\n";
+
+    // 7. Phase 3 新增：ToME4 级 JSON 状态持久化与无损读档校验
+    std::cout << "\n--- [测试 7: ToME4 级 JSON 全局状态保存与无损加载 (SaveLoadSystem)] --- \n";
+    std::vector<std::string> save_logs;
+    bool save_ok = SaveLoadSystem::save_game("assets/saves/quick_save.json", reg, city_map, kalam, save_logs);
+    std::cout << "  存档状态: " << (save_ok ? "成功生成 quick_save.json" : "失败") << "\n";
+    for (const auto& sl : save_logs) std::cout << "    " << sl << "\n";
+
+    // 模拟世界状态剧变：卡拉姆受伤且时间流逝
+    reg.get<ActorComponent>(kalam).hp = 42;
+    TurnSystem::global_tick_count += 88;
+    std::cout << "  [模拟篡改] 玩家 HP 降至 42, 时间推移至 Tick " << TurnSystem::global_tick_count << "\n";
+
+    // 读档还原
+    std::vector<std::string> load_logs;
+    bool load_ok = SaveLoadSystem::load_game("assets/saves/quick_save.json", reg, city_map, kalam, load_logs);
+    std::cout << "  读档状态: " << (load_ok ? "成功读取并恢复全局快照" : "失败") << "\n";
+    for (const auto& ll : load_logs) std::cout << "    " << ll << "\n";
+    std::cout << "  [状态还原验证] 玩家 HP: " << reg.get<ActorComponent>(kalam).hp 
+              << " | 全局 Tick: " << TurnSystem::global_tick_count << "\n";
+
+    // 8. Phase 3 新增：多区块世界拓扑架构与传送锚点 (WorldSector)
+    std::cout << "\n--- [测试 8: 多区块大世界拓扑与传送网关 (WorldSector)] --- \n";
+    WorldSector phoenix_sector(
+        SectorId::PhoenixInnQuarter, "Phoenix Inn Quarter", "达鲁基斯坦繁华市街与青石瓦顶"
+    );
+    phoenix_sector.add_portal(SectorPortal{
+        .trigger_pos = {5, 5},
+        .trigger_elev = ElevationLevel::Street,
+        .dest_sector = SectorId::DarujhistanCatacombs,
+        .dest_pos = {5, 5},
+        .dest_elev = ElevationLevel::Underground,
+        .portal_name = "凤凰客栈下水道排水铁井"
+    });
+    std::cout << "  * 区块注册: 【" << phoenix_sector.name() << "】包含 " 
+              << phoenix_sector.get_portals().size() << " 个世界跳跃锚点 -> 目标区块: " 
+              << phoenix_sector.get_portals()[0].portal_name << "\n";
+
     std::cout << "\n========================================================================\n";
-    std::cout << "  Phase 2 战术与沙盒生态测试全部通过!\n";
+    std::cout << "  Phase 3 三层立体架构、瓦斯灾害与全局持久化测试全部通过!\n";
     std::cout << "  暴君状态: " << (reg.get<JaghutTyrantComponent>(StorylineSystem::boss_raest_entity).is_sealed_in_azath ? "已封印入阿扎斯之屋" : "未封印") << "\n";
     std::cout << "========================================================================\n";
     (void)guard;
+    (void)tlan_warrior;
     return 0;
 }

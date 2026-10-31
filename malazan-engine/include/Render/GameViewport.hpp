@@ -26,6 +26,9 @@
 #include "Story/StorylineSystem.hpp"
 #include "Story/DialogueSystem.hpp"
 #include "Render/IsometricMath.hpp"
+#include "World/WorldSector.hpp"
+#include "World/HazardSystem.hpp"
+#include "Core/SaveLoadSystem.hpp"
 
 #include <vector>
 #include <string>
@@ -53,7 +56,7 @@ public:
         }
 
         m_window = SDL_CreateWindow(
-            "Malazan: Gardens of the Moon - Darujhistan Tactical Core (Phase 2)",
+            "Malazan: Gardens of the Moon - Darujhistan Tactical Core (Phase 3)",
             m_width, m_height,
             SDL_WINDOW_RESIZABLE
         );
@@ -68,15 +71,17 @@ public:
             return false;
         }
 
-        add_log("=== 达鲁基斯坦 (Darujhistan) 战术视口已启动 [Phase 2] ===");
+        add_log("=== 达鲁基斯坦 (Darujhistan) 战术视口已启动 [Phase 3] ===");
+        add_log("[TAB] 循环切换 街面 / 屋顶 / 地下墓穴 立体层级视口");
+        add_log("[G] 上下穿行下水道铁格栅梯 (Sewer Grates)");
+        add_log("[F5] 快速存档 (Quick Save) | [F9] 快速读档 (Quick Load)");
         add_log("[E] 与周边 NPC (克鲁普/克罗库斯/雷克) 交谈");
         add_log("[8/X] 凝视巨剑【德拉格尼普尔】内部死界与拉车亡魂");
-        add_log("[TAB] 切换 街面 / 屋顶 立体层级视口");
-        add_log("[W,A,S,D] 控制卡拉姆移动/轻功飞跃");
+        add_log("[W,A,S,D] 控制卡拉姆移动/轻功飞跃/墓穴探索");
         add_log("[F] 切换战争迷雾 (Fog of War) 开关");
         add_log("[I] 打开/关闭 破桥军战术行囊装备库");
         add_log("[1] 快班释放【暗影灼热风暴】");
-        add_log("[2] 卡拉姆投掷莫兰斯燃烧弹诱爆蓝火");
+        add_log("[2] 卡拉姆投掷莫兰斯燃烧弹诱爆蓝火与瓦斯");
         add_log("[3] 高空俯冲暗杀");
         add_log("[6] 饮下德努尔愈合合剂 (+45 HP)");
         add_log("[7] 投掷莫兰斯·卡瑟毁灭巨弹 (摧毁街区建筑)");
@@ -197,15 +202,67 @@ private:
             }
 
             case SDLK_TAB:
-                // 切换显示高程
-                m_view_elevation = (m_view_elevation == ElevationLevel::Street) 
-                                   ? ElevationLevel::Rooftop 
-                                   : ElevationLevel::Street;
+                // 循环切换显示高程 (街面 -> 屋顶 -> 地下墓穴 -> 街面)
+                if (m_view_elevation == ElevationLevel::Street) {
+                    m_view_elevation = ElevationLevel::Rooftop;
+                    add_log("[视口] 切换至【屋顶层 (Rooftop)】- 飞贼与刺客高空通道");
+                } else if (m_view_elevation == ElevationLevel::Rooftop) {
+                    m_view_elevation = ElevationLevel::Underground;
+                    add_log("[视口] 切换至【地下层 (Underground)】- 远古墓穴与高压瓦斯管网");
+                } else {
+                    m_view_elevation = ElevationLevel::Street;
+                    add_log("[视口] 切换至【街面层 (Street)】- 鹅卵石路与巡逻");
+                }
                 update_fov(reg, map, kalam);
-                add_log(m_view_elevation == ElevationLevel::Rooftop 
-                    ? "[视口] 切换至【屋顶层 (Rooftop)】- 飞贼与刺客通道"
-                    : "[视口] 切换至【街面层 (Street)】- 鹅卵石路与巡逻");
                 break;
+
+            case SDLK_F5: {
+                // 快速存档 (ToME4-Grade Quick Save)
+                std::vector<std::string> s_logs;
+                SaveLoadSystem::save_game("assets/saves/quick_save.json", reg, map, kalam, s_logs);
+                for (const auto& l : s_logs) add_log(l);
+                break;
+            }
+
+            case SDLK_F9: {
+                // 快速读档 (ToME4-Grade Quick Load)
+                std::vector<std::string> l_logs;
+                SaveLoadSystem::load_game("assets/saves/quick_save.json", reg, map, kalam, l_logs);
+                for (const auto& l : l_logs) add_log(l);
+                update_fov(reg, map, kalam);
+                break;
+            }
+
+            case SDLK_G: {
+                // 上下穿行下水道铁格栅梯 (Vertical Transition via Sewer Grates)
+                auto& p_pos = reg.get<PositionComponent>(kalam);
+                if (p_pos.elevation == ElevationLevel::Street) {
+                    const auto& cell = map.get_cell(p_pos.coord, ElevationLevel::Street);
+                    if (cell.terrain == TileTerrain::SewerGrateStairs) {
+                        p_pos.elevation = ElevationLevel::Underground;
+                        m_view_elevation = ElevationLevel::Underground;
+                        add_log(">>> 卡拉姆掀开铁栅栏，顺着生锈铁梯滑入【地下深处阴暗墓穴】！");
+                        update_fov(reg, map, kalam);
+                        action_took_turn = true;
+                    } else {
+                        add_log("当前街面位置没有通往地下的下水道铁格栅 (Sewer Grate)。");
+                    }
+                } else if (p_pos.elevation == ElevationLevel::Underground) {
+                    const auto& cell = map.get_cell(p_pos.coord, ElevationLevel::Underground);
+                    if (cell.terrain == TileTerrain::SewerGrateStairs) {
+                        p_pos.elevation = ElevationLevel::Street;
+                        m_view_elevation = ElevationLevel::Street;
+                        add_log(">>> 卡拉姆攀爬铁梯，推开街面铁栅栏返回【达鲁基斯坦街市】！");
+                        update_fov(reg, map, kalam);
+                        action_took_turn = true;
+                    } else {
+                        add_log("当前地下墓穴位置没有向上攀爬的排水铁梯。");
+                    }
+                } else {
+                    add_log("屋顶层无法直接使用下水道铁梯。");
+                }
+                break;
+            }
 
             case SDLK_F:
                 m_fog_enabled = !m_fog_enabled;
@@ -252,15 +309,28 @@ private:
                 std::vector<std::string> spell_logs;
                 WarrenSystem::cast_multi_warren_spell(quick_ben, reg, "暗影灼热风暴", weave, claw_pos.coord, &spell_logs);
                 for (const auto& l : spell_logs) add_log(l);
+
+                // 明火法术诱爆易爆瓦斯气云
+                std::vector<std::string> haz_logs;
+                HazardSystem::check_and_detonate_gas(claw_pos.coord, claw_pos.elevation, reg, map, haz_logs);
+                for (const auto& hl : haz_logs) add_log(hl);
+
                 action_took_turn = true;
                 break;
             }
 
             case SDLK_2: {
-                // 卡拉姆投掷莫兰斯燃烧弹诱爆蓝火煤气
+                // 卡拉姆投掷莫兰斯燃烧弹诱爆蓝火煤气与地底瓦斯
                 std::vector<std::string> b_logs;
                 BlueFireGasSystem::throw_moranth_munition(kalam, MoranthMunitionType::Burner, {10, 6}, reg, map, false, &b_logs);
                 for (const auto& l : b_logs) add_log(l);
+
+                // 易爆瓦斯气云连环引爆
+                std::vector<std::string> haz_logs;
+                HazardSystem::check_and_detonate_gas({10, 6}, ElevationLevel::Street, reg, map, haz_logs);
+                HazardSystem::check_and_detonate_gas({10, 6}, ElevationLevel::Underground, reg, map, haz_logs);
+                for (const auto& hl : haz_logs) add_log(hl);
+
                 action_took_turn = true;
                 break;
             }
@@ -345,6 +415,13 @@ private:
                 std::vector<std::string> cusser_logs;
                 BlueFireGasSystem::throw_moranth_munition(kalam, MoranthMunitionType::Sharper, blast_target, reg, map, true, &cusser_logs);
                 for (const auto& l : cusser_logs) add_log(l);
+
+                // 易爆瓦斯气云连环引爆
+                std::vector<std::string> haz_logs;
+                HazardSystem::check_and_detonate_gas(blast_target, ElevationLevel::Street, reg, map, haz_logs);
+                HazardSystem::check_and_detonate_gas(blast_target, ElevationLevel::Underground, reg, map, haz_logs);
+                for (const auto& hl : haz_logs) add_log(hl);
+
                 action_took_turn = true;
                 break;
             }
@@ -384,6 +461,13 @@ private:
             std::vector<std::string> leap_logs;
             RooftopTacticsSystem::attempt_rooftop_leap(ent, reg, map, target, &leap_logs);
             for (const auto& l : leap_logs) add_log(l);
+        } else if (pos.elevation == ElevationLevel::Underground) {
+            const auto& cell = map.get_cell(target, ElevationLevel::Underground);
+            if (!cell.blocks_movement) {
+                pos.coord = target;
+            } else {
+                add_log("前方是地下墓穴古老石壁，无法通行。");
+            }
         } else {
             const auto& cell = map.get_cell(target, ElevationLevel::Street);
             if (!cell.blocks_movement) {
@@ -429,42 +513,106 @@ private:
         int32_t w = map.width();
         int32_t h = map.height();
 
-        // A. 基础地面层 (Z = 0)：结合战争迷雾渲染等距鹅卵石网格
-        for (int32_t y = 0; y < h; ++y) {
-            for (int32_t x = 0; x < w; ++x) {
-                Vec2i p{x, y};
-                size_t fog_idx = static_cast<size_t>(y * w + x);
-                VisibilityState v_state = (m_fog_enabled && fog_idx < m_fog_grid.size())
-                                          ? m_fog_grid[fog_idx]
-                                          : VisibilityState::Visible;
+        // A. 基础地面与地下层渲染
+        if (m_view_elevation == ElevationLevel::Underground) {
+            // 渲染地下墓穴层 (Z = -1.0)
+            for (int32_t y = 0; y < h; ++y) {
+                for (int32_t x = 0; x < w; ++x) {
+                    Vec2i p{x, y};
+                    size_t fog_idx = static_cast<size_t>(y * w + x);
+                    VisibilityState v_state = (m_fog_enabled && fog_idx < m_fog_grid.size())
+                                              ? m_fog_grid[fog_idx]
+                                              : VisibilityState::Visible;
 
-                if (v_state == VisibilityState::Unexplored) {
-                    // 未探索区域：绘制深邃无光地块
-                    SDL_FColor dark_col{0.03f, 0.04f, 0.05f, 1.0f};
+                    if (v_state == VisibilityState::Unexplored) {
+                        SDL_FColor dark_col{0.02f, 0.02f, 0.03f, 1.0f};
+                        IsometricRenderer::draw_iso_tile(m_renderer, static_cast<float>(x), static_cast<float>(y), 
+                                                        -1.0f, origin_x, origin_y, dark_col);
+                        continue;
+                    }
+
+                    const auto& under_cell = map.get_cell(p, ElevationLevel::Underground);
+                    SDL_FColor tile_col{0.09f, 0.10f, 0.13f, 1.0f}; // 墓穴潮湿黑玄武岩地面
+
+                    if (under_cell.terrain == TileTerrain::CatacombTunnel) {
+                        tile_col = {0.13f, 0.14f, 0.17f, 1.0f};
+                    } else if (under_cell.terrain == TileTerrain::AzathRootNode) {
+                        tile_col = {0.18f, 0.38f, 0.22f, 1.0f}; // 阿扎斯生命根须绿苔
+                    } else if (under_cell.terrain == TileTerrain::GasMainPipe) {
+                        tile_col = {0.22f, 0.28f, 0.36f, 1.0f}; // 高压煤气主管道铁青色
+                    }
+
+                    if (v_state == VisibilityState::Explored) {
+                        tile_col.r *= 0.32f;
+                        tile_col.g *= 0.32f;
+                        tile_col.b *= 0.32f;
+                    }
+
                     IsometricRenderer::draw_iso_tile(m_renderer, static_cast<float>(x), static_cast<float>(y), 
-                                                    0.0f, origin_x, origin_y, dark_col);
-                    continue;
+                                                    -1.0f, origin_x, origin_y, tile_col);
+
+                    // 绘制地下实心玄武岩石壁
+                    if (under_cell.blocks_movement && under_cell.terrain == TileTerrain::CatacombWall) {
+                        IsometricRenderer::draw_iso_catacomb_wall(m_renderer, static_cast<float>(x), static_cast<float>(y), origin_x, origin_y);
+                    }
+
+                    // 绘制通往地面的下水道铁格栅梯
+                    if (under_cell.terrain == TileTerrain::SewerGrateStairs) {
+                        IsometricRenderer::draw_iso_sewer_grate(m_renderer, static_cast<float>(x), static_cast<float>(y), -1.0f, origin_x, origin_y);
+                    }
                 }
+            }
 
-                const auto& street_cell = map.get_cell(p, ElevationLevel::Street);
-                bool checker = ((x + y) % 2 == 0);
-                SDL_FColor street_col = checker 
-                    ? SDL_FColor{0.14f, 0.16f, 0.20f, 1.0f} 
-                    : SDL_FColor{0.11f, 0.13f, 0.16f, 1.0f};
-
-                if (street_cell.terrain == TileTerrain::NarrowAlley) {
-                    street_col = {0.18f, 0.14f, 0.12f, 1.0f}; // 阴暗瓦砾小巷
+            // 渲染地下悬浮的可燃瓦斯气云
+            for (const auto& cloud : HazardSystem::active_gas_clouds) {
+                if (cloud.elev == ElevationLevel::Underground) {
+                    IsometricRenderer::draw_iso_gas_cloud(m_renderer, static_cast<float>(cloud.pos.x), static_cast<float>(cloud.pos.y), 
+                                                         -1.0f, origin_x, origin_y, cloud.concentration, pulse);
                 }
+            }
+        } else {
+            // 基础街面层 (Z = 0)：结合战争迷雾渲染等距鹅卵石网格
+            for (int32_t y = 0; y < h; ++y) {
+                for (int32_t x = 0; x < w; ++x) {
+                    Vec2i p{x, y};
+                    size_t fog_idx = static_cast<size_t>(y * w + x);
+                    VisibilityState v_state = (m_fog_enabled && fog_idx < m_fog_grid.size())
+                                              ? m_fog_grid[fog_idx]
+                                              : VisibilityState::Visible;
 
-                // 记忆区 (Explored) 色彩暗化与冷灰处理
-                if (v_state == VisibilityState::Explored) {
-                    street_col.r *= 0.28f;
-                    street_col.g *= 0.28f;
-                    street_col.b *= 0.28f;
+                    if (v_state == VisibilityState::Unexplored) {
+                        // 未探索区域：绘制深邃无光地块
+                        SDL_FColor dark_col{0.03f, 0.04f, 0.05f, 1.0f};
+                        IsometricRenderer::draw_iso_tile(m_renderer, static_cast<float>(x), static_cast<float>(y), 
+                                                        0.0f, origin_x, origin_y, dark_col);
+                        continue;
+                    }
+
+                    const auto& street_cell = map.get_cell(p, ElevationLevel::Street);
+                    bool checker = ((x + y) % 2 == 0);
+                    SDL_FColor street_col = checker 
+                        ? SDL_FColor{0.14f, 0.16f, 0.20f, 1.0f} 
+                        : SDL_FColor{0.11f, 0.13f, 0.16f, 1.0f};
+
+                    if (street_cell.terrain == TileTerrain::NarrowAlley) {
+                        street_col = {0.18f, 0.14f, 0.12f, 1.0f}; // 阴暗瓦砾小巷
+                    }
+
+                    // 记忆区 (Explored) 色彩暗化与冷灰处理
+                    if (v_state == VisibilityState::Explored) {
+                        street_col.r *= 0.28f;
+                        street_col.g *= 0.28f;
+                        street_col.b *= 0.28f;
+                    }
+
+                    IsometricRenderer::draw_iso_tile(m_renderer, static_cast<float>(x), static_cast<float>(y), 
+                                                    0.0f, origin_x, origin_y, street_col);
+
+                    // 街面层通往地下的铸铁铁格栅
+                    if (street_cell.terrain == TileTerrain::SewerGrateStairs) {
+                        IsometricRenderer::draw_iso_sewer_grate(m_renderer, static_cast<float>(x), static_cast<float>(y), 0.0f, origin_x, origin_y);
+                    }
                 }
-
-                IsometricRenderer::draw_iso_tile(m_renderer, static_cast<float>(x), static_cast<float>(y), 
-                                                0.0f, origin_x, origin_y, street_col);
             }
         }
 
@@ -476,7 +624,10 @@ private:
                                       ? m_fog_grid[c_idx]
                                       : VisibilityState::Visible;
             if (c_state != VisibilityState::Unexplored) {
-                float gz = (field.elevation == ElevationLevel::Rooftop) ? 1.0f : 0.0f;
+                float gz = 0.0f;
+                if (field.elevation == ElevationLevel::Rooftop) gz = 1.0f;
+                else if (field.elevation == ElevationLevel::Underground) gz = -1.0f;
+
                 IsometricRenderer::draw_iso_otataral_field(
                     m_renderer,
                     static_cast<float>(field.center.x),
@@ -498,36 +649,48 @@ private:
 
                 if (v_state == VisibilityState::Unexplored) continue;
 
-                const auto& street_cell = map.get_cell(p, ElevationLevel::Street);
-                const auto& roof_cell = map.get_cell(p, ElevationLevel::Rooftop);
+                // 若处于街面或屋顶视口，渲染建筑实体与路灯
+                if (m_view_elevation != ElevationLevel::Underground) {
+                    const auto& street_cell = map.get_cell(p, ElevationLevel::Street);
+                    const auto& roof_cell = map.get_cell(p, ElevationLevel::Rooftop);
 
-                // 1. 绘制 3D 挤出立体建筑方体 (受光面、阴影面、屋顶顶面)
-                if (street_cell.terrain == TileTerrain::BuildingWall) {
-                    bool is_terrace = (roof_cell.terrain == TileTerrain::FlatTerrace);
-                    bool is_collapsed = roof_cell.roof_collapsed;
-                    IsometricRenderer::draw_iso_building_block(m_renderer, static_cast<float>(x), static_cast<float>(y), 
-                                                              origin_x, origin_y, is_terrace, is_collapsed);
-                }
+                    // 1. 绘制 3D 挤出立体建筑方体 (受光面、阴影面、屋顶顶面)
+                    if (street_cell.terrain == TileTerrain::BuildingWall) {
+                        bool is_terrace = (roof_cell.terrain == TileTerrain::FlatTerrace);
+                        bool is_collapsed = roof_cell.roof_collapsed;
+                        IsometricRenderer::draw_iso_building_block(m_renderer, static_cast<float>(x), static_cast<float>(y), 
+                                                                  origin_x, origin_y, is_terrace, is_collapsed);
+                    }
 
-                // 2. 绘制 2.5D 蓝火煤气路灯与大范围动态光晕 (仅在可见或探索区)
-                for (auto [node_ent, node] : reg.view<BlueFireNodeComponent>()) {
-                    if (node.coord == p && node.is_lit) {
-                        IsometricRenderer::draw_iso_blue_gas_lamp(m_renderer, static_cast<float>(x), static_cast<float>(y), 
-                                                                 origin_x, origin_y, pulse);
+                    // 2. 绘制 2.5D 蓝火煤气路灯与大范围动态光晕 (仅在可见或探索区)
+                    for (auto [node_ent, node] : reg.view<BlueFireNodeComponent>()) {
+                        if (node.coord == p && node.is_lit) {
+                            IsometricRenderer::draw_iso_blue_gas_lamp(m_renderer, static_cast<float>(x), static_cast<float>(y), 
+                                                                     origin_x, origin_y, pulse);
+                        }
                     }
                 }
 
                 // 3. 绘制 3D 实体角色立柱与高度层级
                 for (auto [ent, pos, actor] : reg.view<PositionComponent, ActorComponent>()) {
                     if (pos.coord == p) {
+                        // 高程过滤：地下层视口仅显示地下角色；地面/屋顶视口仅显示地面/屋顶角色
+                        if (m_view_elevation == ElevationLevel::Underground) {
+                            if (pos.elevation != ElevationLevel::Underground) continue;
+                        } else {
+                            if (pos.elevation == ElevationLevel::Underground) continue;
+                        }
+
                         // 迷雾隐藏机制：非视线内 (Visible) 的存活敌对目标不予渲染！
                         if (m_fog_enabled && v_state != VisibilityState::Visible && 
                             actor.faction != Faction::Bridgeburners && actor.is_alive) {
                             continue;
                         }
 
-                        // 角色在屋顶层时，Z 轴物理升高至 1.0f (立于 3D 建筑屋顶顶面之上)
-                        float gz = (pos.elevation == ElevationLevel::Rooftop) ? 1.0f : 0.0f;
+                        // 角色在屋顶层时 Z = 1.0f，街面层 Z = 0.0f，地下层 Z = -1.0f
+                        float gz = 0.0f;
+                        if (pos.elevation == ElevationLevel::Rooftop) gz = 1.0f;
+                        else if (pos.elevation == ElevationLevel::Underground) gz = -1.0f;
 
                         if (!actor.is_alive) {
                             SDL_FPoint ground = IsometricRenderer::world_to_screen(static_cast<float>(x), static_cast<float>(y), 
@@ -574,6 +737,10 @@ private:
                         } else if (actor.faction == Faction::NeutralCivilians) {
                             color = {0.60f, 0.65f, 0.70f, 1.0f}; // 城防军卫兵钢灰
                             glyph = 'G';
+                        } else if (actor.faction == Faction::TlanImass) {
+                            color = {0.88f, 0.85f, 0.70f, 1.0f}; // 泰兰·伊玛斯太古白骨米黄
+                            glyph = 'T';
+                            scale = 1.35f;
                         }
 
                         IsometricRenderer::draw_iso_character_token(m_renderer, static_cast<float>(x), static_cast<float>(y), 
@@ -667,15 +834,27 @@ private:
         }
 
         // 当前高程与迷雾模式指示
-        std::string layer_str = (m_view_elevation == ElevationLevel::Rooftop)
-            ? "[TAB] VIEW: ROOFTOP (SLATE & ALLEYS)"
-            : "[TAB] VIEW: STREET (COBBLESTONES & LAMPS)";
+        std::string layer_str;
+        if (m_view_elevation == ElevationLevel::Rooftop) {
+            layer_str = "[TAB] VIEW: ROOFTOP (SLATE & ALLEYS)";
+        } else if (m_view_elevation == ElevationLevel::Underground) {
+            layer_str = "[TAB] VIEW: UNDERGROUND (CATACOMBS & GAS MAINS)";
+        } else {
+            layer_str = "[TAB] VIEW: STREET (COBBLESTONES & LAMPS)";
+        }
         FontRenderer::draw_text(m_renderer, layer_str, hud_x, y, 1.5f, {0, 229, 255, 255});
         y += 18.0f;
 
         std::string fow_str = m_fog_enabled ? "[F] FOG OF WAR: ENABLED" : "[F] FOG OF WAR: OMNISCIENT";
         FontRenderer::draw_text(m_renderer, fow_str, hud_x, y, 1.4f, m_fog_enabled ? SDL_Color{120, 255, 150, 255} : SDL_Color{255, 180, 50, 255});
-        y += 22.0f;
+        y += 20.0f;
+
+        // 易爆高压瓦斯云警报指示
+        if (!HazardSystem::active_gas_clouds.empty()) {
+            std::string gas_str = "WARNING: " + std::to_string(HazardSystem::active_gas_clouds.size()) + " GAS CLOUDS (HIGH EXPLOSIVE!)";
+            FontRenderer::draw_text(m_renderer, gas_str, hud_x, y, 1.35f, {255, 70, 70, 255});
+            y += 18.0f;
+        }
 
         // 全局阿扎斯之屋威胁槽
         FontRenderer::draw_text(m_renderer, "AZATH HOUSE AWAKENING GAUGE:", hud_x, y, 1.5f, {200, 80, 80, 255});
@@ -715,8 +894,12 @@ private:
             auto& a = reg.get<ActorComponent>(e);
             auto& p = reg.get<PositionComponent>(e);
 
+            std::string elev_tag = "STREET";
+            if (p.elevation == ElevationLevel::Rooftop) elev_tag = "ROOF";
+            else if (p.elevation == ElevationLevel::Underground) elev_tag = "UNDER";
+
             std::string status = title + " - HP: " + std::to_string(a.hp) + "/" + std::to_string(a.max_hp)
-                                 + " [" + (p.elevation == ElevationLevel::Rooftop ? "ROOF" : "STREET") + "]";
+                                 + " [" + elev_tag + "]";
             FontRenderer::draw_text(m_renderer, status, hud_x, y, 1.45f, color);
             y += 18.0f;
         };
@@ -724,6 +907,14 @@ private:
         draw_actor_stat(kalam, "[K] KALAM MEKHAR", {80, 220, 100, 255});
         draw_actor_stat(quick_ben, "[Q] QUICK BEN", {180, 120, 255, 255});
         draw_actor_stat(claw, "[C] IMPERIAL CLAW", {255, 100, 100, 255});
+
+        // 泰兰·伊玛斯太古战将状态
+        for (auto [ent, actor, pos] : reg.view<ActorComponent, PositionComponent>()) {
+            if (actor.faction == Faction::TlanImass) {
+                draw_actor_stat(ent, "[T] T'LAN IMASS", {230, 220, 180, 255});
+                break;
+            }
+        }
 
         // 贾格特暴君状态
         if (StorylineSystem::boss_raest_entity != NULL_ENTITY && reg.has<ActorComponent>(StorylineSystem::boss_raest_entity)) {
@@ -740,7 +931,9 @@ private:
         // 操作指引面板
         FontRenderer::draw_text(m_renderer, "TACTICAL COMMANDS:", hud_x, y, 1.55f, {255, 255, 255, 255});
         y += 18.0f;
-        FontRenderer::draw_text(m_renderer, "[W,A,S,D] 3D MOVE | [E] TALK NPC | [I] INVENTORY", hud_x, y, 1.35f, {180, 180, 180, 255});
+        FontRenderer::draw_text(m_renderer, "[W,A,S,D] 3D MOVE | [G] SEWER STAIRS | [TAB] ELEV", hud_x, y, 1.35f, {180, 180, 180, 255});
+        y += 15.0f;
+        FontRenderer::draw_text(m_renderer, "[F5] QUICK SAVE | [F9] QUICK LOAD | [E] TALK NPC", hud_x, y, 1.35f, {180, 220, 255, 255});
         y += 15.0f;
         FontRenderer::draw_text(m_renderer, "[1] SHADOWFIRE | [2] BURNER | [3] PLUNGE", hud_x, y, 1.35f, {180, 120, 255, 255});
         y += 15.0f;

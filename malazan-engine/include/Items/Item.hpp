@@ -170,6 +170,44 @@ public:
             .max_charges = 2
         };
     }
+
+    static Item create_tlan_flint_sword() {
+        return Item{
+            .id = "tlan_flint_sword",
+            .name = "提兰·伊玛斯古燧石战刃 (T'lan Imass Flint Blade)",
+            .description = "三十万年前太古骨骼仪式打磨的燧石大剑，天然散发提兰（Tellann）荒火的纯净不朽微芒，永不生锈与卷刃。",
+            .category = ItemCategory::Weapon,
+            .rarity = ItemRarity::ElderArtifact,
+            .damage = 48,
+            .damage_type = DamageType::PhysicalSlash,
+            .armor_bonus = 6,
+            .has_otataral = false,
+            .otataral_radius = 0.0f,
+            .is_munition = false,
+            .heal_amount = 0,
+            .charges = 1,
+            .max_charges = 1
+        };
+    }
+
+    static Item create_finnest_acorn() {
+        return Item{
+            .id = "finnest_relic",
+            .name = "雷斯特的芬尼斯古橡果 (Raest's Finnest Acorn)",
+            .description = "上古贾格特暴君将自身近半太古魔能封存剥离所凝聚的活体容器。佩戴时魔力激荡，但亦会招致阿扎斯之木的本能索求。",
+            .category = ItemCategory::Relic,
+            .rarity = ItemRarity::ElderArtifact,
+            .damage = 0,
+            .damage_type = DamageType::ChaosDisruption,
+            .armor_bonus = 15,
+            .has_otataral = false,
+            .otataral_radius = 0.0f,
+            .is_munition = false,
+            .heal_amount = 0,
+            .charges = 1,
+            .max_charges = 1
+        };
+    }
 };
 
 } // namespace Malazan

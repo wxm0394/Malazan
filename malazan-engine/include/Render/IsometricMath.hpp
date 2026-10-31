@@ -207,7 +207,106 @@ public:
             SDL_RenderLine(renderer, cx, cy + 10.0f, cx + 7.0f, cy + 10.0f);
             SDL_RenderLine(renderer, cx + 7.0f, cy + 5.0f, cx + 7.0f, cy + 10.0f);
             SDL_RenderLine(renderer, cx + 3.0f, cy + 5.0f, cx + 7.0f, cy + 5.0f);
+        } else if (glyph == 'T') { // 泰兰·伊玛斯 (T'lan Imass Bone Warrior)
+            SDL_RenderLine(renderer, cx, cy, cx + 7.0f, cy);
+            SDL_RenderLine(renderer, cx + 3.5f, cy, cx + 3.5f, cy + 10.0f);
         }
+    }
+
+    // 绘制下水道与地下墓穴铸铁铁格栅 (Sewer Grate Stairs)
+    static void draw_iso_sewer_grate(
+        SDL_Renderer* renderer,
+        float gx, float gy, float gz,
+        float origin_x, float origin_y
+    ) {
+        SDL_FPoint p = world_to_screen(gx, gy, gz, origin_x, origin_y);
+        SDL_FRect grate_base{p.x - 14.0f, p.y - 7.0f, 28.0f, 14.0f};
+        SDL_SetRenderDrawColor(renderer, 10, 12, 16, 240);
+        SDL_RenderFillRect(renderer, &grate_base);
+        SDL_SetRenderDrawColor(renderer, 100, 95, 85, 255);
+        SDL_RenderRect(renderer, &grate_base);
+        for (float ox = -10.0f; ox <= 10.0f; ox += 4.0f) {
+            SDL_RenderLine(renderer, p.x + ox, p.y - 7.0f, p.x + ox, p.y + 7.0f);
+        }
+        SDL_RenderLine(renderer, p.x - 14.0f, p.y, p.x + 14.0f, p.y);
+    }
+
+    // 绘制地下墓穴高压易爆瓦斯气云 (Combustible Gas Cloud)
+    static void draw_iso_gas_cloud(
+        SDL_Renderer* renderer,
+        float gx, float gy, float gz,
+        float origin_x, float origin_y,
+        float concentration,
+        float pulse
+    ) {
+        SDL_FPoint ground = world_to_screen(gx, gy, gz, origin_x, origin_y);
+        float r_screen = (TILE_W * 0.75f) + 3.0f * std::sin(pulse * 2.5f + (gx + gy));
+        
+        SDL_FColor center_col{0.10f, 0.85f, 0.70f, std::min(0.55f, concentration / 140.0f)};
+        SDL_FColor edge_col{0.05f, 0.35f, 0.30f, 0.0f};
+
+        constexpr int SEGMENTS = 12;
+        std::vector<SDL_Vertex> verts;
+        verts.push_back({ground, center_col, {0,0}});
+        for (int i = 0; i <= SEGMENTS; ++i) {
+            float angle = (i * 2.0f * 3.14159f) / SEGMENTS;
+            float px = ground.x + std::cos(angle) * r_screen;
+            float py = ground.y + std::sin(angle) * (r_screen * 0.5f);
+            verts.push_back({{px, py}, edge_col, {0,0}});
+        }
+        std::vector<int> idx;
+        for (int i = 1; i <= SEGMENTS; ++i) {
+            idx.push_back(0);
+            idx.push_back(i);
+            idx.push_back(i + 1);
+        }
+        SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()), 
+                           idx.data(), static_cast<int>(idx.size()));
+    }
+
+    // 绘制地下墓穴玄武岩古老坚壁 (Catacomb Subterranean Wall)
+    static void draw_iso_catacomb_wall(
+        SDL_Renderer* renderer,
+        float gx, float gy,
+        float origin_x, float origin_y
+    ) {
+        float gz = -1.0f;
+        SDL_FPoint b_n = world_to_screen(gx, gy, gz, origin_x, origin_y);
+        SDL_FPoint b_e = world_to_screen(gx + 1.0f, gy, gz, origin_x, origin_y);
+        SDL_FPoint b_s = world_to_screen(gx + 1.0f, gy + 1.0f, gz, origin_x, origin_y);
+        SDL_FPoint b_w = world_to_screen(gx, gy + 1.0f, gz, origin_x, origin_y);
+
+        float wall_h = 24.0f;
+        SDL_FPoint t_n = {b_n.x, b_n.y - wall_h};
+        SDL_FPoint t_e = {b_e.x, b_e.y - wall_h};
+        SDL_FPoint t_s = {b_s.x, b_s.y - wall_h};
+        SDL_FPoint t_w = {b_w.x, b_w.y - wall_h};
+
+        SDL_FColor side_color{0.07f, 0.08f, 0.10f, 1.0f};
+        SDL_FColor top_color{0.13f, 0.15f, 0.18f, 1.0f};
+
+        int quad_idx[6] = {0, 1, 2, 0, 2, 3};
+        SDL_Vertex left_verts[4] = {
+            { t_w, side_color, {0,0} }, { t_s, side_color, {1,0} },
+            { b_s, side_color, {1,1} }, { b_w, side_color, {0,1} }
+        };
+        SDL_RenderGeometry(renderer, nullptr, left_verts, 4, quad_idx, 6);
+
+        SDL_Vertex right_verts[4] = {
+            { t_s, side_color, {0,0} }, { t_e, side_color, {1,0} },
+            { b_e, side_color, {1,1} }, { b_s, side_color, {0,1} }
+        };
+        SDL_RenderGeometry(renderer, nullptr, right_verts, 4, quad_idx, 6);
+
+        SDL_Vertex top_verts[4] = {
+            { t_n, top_color, {0,0} }, { t_e, top_color, {1,0} },
+            { t_s, top_color, {1,1} }, { t_w, top_color, {0,1} }
+        };
+        SDL_RenderGeometry(renderer, nullptr, top_verts, 4, quad_idx, 6);
+
+        SDL_SetRenderDrawColor(renderer, 50, 60, 75, 180);
+        SDL_RenderLine(renderer, t_w.x, t_w.y, t_s.x, t_s.y);
+        SDL_RenderLine(renderer, t_s.x, t_s.y, t_e.x, t_e.y);
     }
 
     // 绘制 2.5D 蓝火路灯与环形漫射辐射光晕

@@ -21,6 +21,14 @@ struct InventoryComponent {
         return true;
     }
 
+    void equip(Item item) {
+        if (item.category == ItemCategory::Weapon) {
+            equipped_main_hand = std::move(item);
+        } else {
+            equipped_off_hand = std::move(item);
+        }
+    }
+
     bool remove_item(size_t index) {
         if (index >= backpack.size()) return false;
         backpack.erase(backpack.begin() + index);

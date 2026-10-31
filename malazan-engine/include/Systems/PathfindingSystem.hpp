@@ -10,8 +10,14 @@
 namespace Malazan {
 
 struct PathNode {
-    Vec2i pos;
+    Vec2i pos{0, 0};
     ElevationLevel elev{ElevationLevel::Street};
+    Vec2i coord{0, 0};
+    ElevationLevel elevation{ElevationLevel::Street};
+
+    PathNode() = default;
+    PathNode(Vec2i p, ElevationLevel e)
+        : pos(p), elev(e), coord(p), elevation(e) {}
 
     bool operator==(const PathNode& o) const {
         return pos == o.pos && elev == o.elev;
@@ -28,6 +34,17 @@ struct PathNodeHash {
 
 class PathfindingSystem {
 public:
+    static std::vector<PathNode> find_path_3d(
+        const DarujhistanMap& map,
+        Vec2i start_pos,
+        ElevationLevel start_elev,
+        Vec2i goal_pos,
+        ElevationLevel goal_elev,
+        bool can_climb_roofs = true
+    ) {
+        return find_path(PathNode{start_pos, start_elev}, PathNode{goal_pos, goal_elev}, map, can_climb_roofs);
+    }
+
     static std::vector<PathNode> find_path(
         PathNode start,
         PathNode goal,
@@ -86,6 +103,11 @@ public:
                     if (!cell.blocks_movement && cell.terrain != TileTerrain::BuildingWall) {
                         passable = true;
                     }
+                } else if (current.elev == ElevationLevel::Underground) {
+                    const auto& cell = map.get_cell(next_pos, ElevationLevel::Underground);
+                    if (!cell.blocks_movement && cell.terrain != TileTerrain::CatacombWall) {
+                        passable = true;
+                    }
                 } else if (current.elev == ElevationLevel::Rooftop) {
                     const auto& roof_cell = map.get_cell(next_pos, ElevationLevel::Rooftop);
                     const auto& street_cell = map.get_cell(next_pos, ElevationLevel::Street);
@@ -118,7 +140,33 @@ public:
                 }
             }
 
-            // 2. 空间高程垂直跃迁 (Vertical Transitions: Climb up / Plunge down)
+            // 2. 空间高程垂直跃迁 (Vertical Transitions)
+            // A. 地下墓道石阶铁栅门扉与街面互通 (Sewer Grate / Catacomb Stairs)
+            if (current.elev == ElevationLevel::Street) {
+                const auto& cur_st = map.get_cell(current.pos, ElevationLevel::Street);
+                if (cur_st.terrain == TileTerrain::SewerGrateStairs) {
+                    PathNode down_node{current.pos, ElevationLevel::Underground};
+                    float tentative_g = current_g + 1.2f;
+                    if (!g_score.contains(down_node) || tentative_g < g_score[down_node]) {
+                        came_from[down_node] = current;
+                        g_score[down_node] = tentative_g;
+                        open_set.push({down_node, tentative_g + heuristic(down_node, goal)});
+                    }
+                }
+            } else if (current.elev == ElevationLevel::Underground) {
+                const auto& cur_ug = map.get_cell(current.pos, ElevationLevel::Underground);
+                if (cur_ug.terrain == TileTerrain::SewerGrateStairs) {
+                    PathNode up_node{current.pos, ElevationLevel::Street};
+                    float tentative_g = current_g + 1.2f;
+                    if (!g_score.contains(up_node) || tentative_g < g_score[up_node]) {
+                        came_from[up_node] = current;
+                        g_score[up_node] = tentative_g;
+                        open_set.push({up_node, tentative_g + heuristic(up_node, goal)});
+                    }
+                }
+            }
+
+            // B. 屋顶攀爬与坠落 (Rooftop climb / plunge)
             if (can_climb_roofs) {
                 if (current.elev == ElevationLevel::Street) {
                     // 若当前街面位置紧邻建筑外墙，且该建筑上方是屋顶，可攀爬上房

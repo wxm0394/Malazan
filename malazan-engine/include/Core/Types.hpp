@@ -44,7 +44,8 @@ enum class Faction : uint8_t {
     ImperialClaw,        // 帝国爪牙特工 (Pearl, Surly's network)
     TisteAndii,          // 漂浮城提斯·安迪尔族 (Anomander Rake 阵营)
     PhoenixInnCircle,    // 凤凰客栈同盟 (Kruppe, Crokus, Murillio)
-    JaghutTyrantRaest    // 沉睡与苏醒的贾格特暴君
+    JaghutTyrantRaest,   // 沉睡与苏醒的贾格特暴君
+    TlanImass            // 泰兰·伊玛斯太古骨骸战士 (Logros/Kron T'lan Imass)
 };
 
 // 沃伦法术界 (Warrens)

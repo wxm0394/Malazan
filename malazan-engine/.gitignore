@@ -1,0 +1,7 @@
+# Malazan Engine gitignore
+build/
+bin/
+assets/saves/*.json
+!assets/saves/.gitkeep
+*.swp
+*.o
