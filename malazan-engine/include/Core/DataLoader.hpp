@@ -38,6 +38,9 @@ inline Faction parse_faction(const std::string& str) {
     if (str == "CityAssassinsGuild") return Faction::CityAssassinsGuild;
     if (str == "TisteAndii") return Faction::TisteAndii;
     if (str == "PhoenixInnCircle") return Faction::PhoenixInnCircle;
+    if (str == "JaghutTyrantRaest") return Faction::JaghutTyrantRaest;
+    if (str == "TlanImass") return Faction::TlanImass;
+    if (str == "ChaosVoidDemons") return Faction::ChaosVoidDemons;
     return Faction::NeutralCivilians;
 }
 

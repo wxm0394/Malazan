@@ -210,7 +210,80 @@ public:
         } else if (glyph == 'T') { // 泰兰·伊玛斯 (T'lan Imass Bone Warrior)
             SDL_RenderLine(renderer, cx, cy, cx + 7.0f, cy);
             SDL_RenderLine(renderer, cx + 3.5f, cy, cx + 3.5f, cy + 10.0f);
+        } else if (glyph == 'D') { // 混沌裂隙恶魔 (Chaos Rift Demon)
+            SDL_RenderLine(renderer, cx, cy, cx, cy + 10.0f);
+            SDL_RenderLine(renderer, cx, cy, cx + 5.0f, cy + 3.0f);
+            SDL_RenderLine(renderer, cx + 5.0f, cy + 3.0f, cx + 5.0f, cy + 7.0f);
+            SDL_RenderLine(renderer, cx + 5.0f, cy + 7.0f, cx, cy + 10.0f);
         }
+    }
+
+    // 绘制工兵布设的莫兰斯定向地雷 (Sapper Directional Mine)
+    static void draw_iso_sapper_mine(
+        SDL_Renderer* renderer,
+        float gx, float gy, float gz,
+        float origin_x, float origin_y,
+        float pulse
+    ) {
+        SDL_FPoint ground = world_to_screen(gx, gy, gz, origin_x, origin_y);
+        SDL_FRect mine_base{ground.x - 8.0f, ground.y - 4.0f, 16.0f, 8.0f};
+        SDL_SetRenderDrawColor(renderer, 26, 30, 36, 255);
+        SDL_RenderFillRect(renderer, &mine_base);
+        SDL_SetRenderDrawColor(renderer, 80, 85, 90, 255);
+        SDL_RenderRect(renderer, &mine_base);
+
+        // 闪烁的炼金激活指示灯 (Primer LED)
+        float blink = 0.5f + 0.5f * std::sin(pulse * 9.0f);
+        SDL_FRect primer_led{ground.x - 2.0f, ground.y - 2.0f, 4.0f, 4.0f};
+        SDL_SetRenderDrawColor(renderer, 255, 40, 40, static_cast<uint8_t>(255 * blink));
+        SDL_RenderFillRect(renderer, &primer_led);
+    }
+
+    // 绘制异界空间撕裂维度旋涡 (Dynamic Warren Rift)
+    static void draw_iso_warren_rift(
+        SDL_Renderer* renderer,
+        float gx, float gy, float gz,
+        float origin_x, float origin_y,
+        uint8_t rift_type,
+        float pulse
+    ) {
+        SDL_FPoint ground = world_to_screen(gx, gy, gz, origin_x, origin_y);
+        float r_screen = (TILE_W * 0.9f) + 4.0f * std::sin(pulse * 4.5f);
+        
+        SDL_FColor center_col{0.75f, 0.15f, 0.95f, 0.65f}; // 混沌暗紫
+        SDL_FColor edge_col{0.35f, 0.05f, 0.55f, 0.0f};
+        if (rift_type == 1) { // Kurald Galain 纯暗
+            center_col = {0.05f, 0.05f, 0.18f, 0.85f};
+            edge_col = {0.15f, 0.15f, 0.35f, 0.0f};
+        } else if (rift_type == 2) { // Tellann 荒火
+            center_col = {0.95f, 0.65f, 0.12f, 0.75f};
+            edge_col = {0.85f, 0.25f, 0.05f, 0.0f};
+        }
+
+        constexpr int SEGMENTS = 14;
+        std::vector<SDL_Vertex> verts;
+        verts.push_back({ground, center_col, {0,0}});
+        for (int i = 0; i <= SEGMENTS; ++i) {
+            float angle = (i * 2.0f * 3.14159f) / SEGMENTS + (pulse * 2.5f); // 动态旋流
+            float px = ground.x + std::cos(angle) * r_screen;
+            float py = ground.y + std::sin(angle) * (r_screen * 0.5f);
+            verts.push_back({{px, py}, edge_col, {0,0}});
+        }
+        std::vector<int> idx;
+        for (int i = 1; i <= SEGMENTS; ++i) {
+            idx.push_back(0);
+            idx.push_back(i);
+            idx.push_back(i + 1);
+        }
+        SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()), 
+                           idx.data(), static_cast<int>(idx.size()));
+
+        // 空间撕裂黑色垂直裂隙核心
+        SDL_FRect core{ground.x - 3.0f, ground.y - 12.0f, 6.0f, 24.0f};
+        SDL_SetRenderDrawColor(renderer, 10, 5, 18, 255);
+        SDL_RenderFillRect(renderer, &core);
+        SDL_SetRenderDrawColor(renderer, 220, 160, 255, 200);
+        SDL_RenderRect(renderer, &core);
     }
 
     // 绘制下水道与地下墓穴铸铁铁格栅 (Sewer Grate Stairs)

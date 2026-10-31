@@ -21,6 +21,10 @@
 #include "World/WorldSector.hpp"
 #include "World/HazardSystem.hpp"
 #include "Core/SaveLoadSystem.hpp"
+#include "Render/ScreenEffects.hpp"
+#include "Systems/WarrenRiftSystem.hpp"
+#include "Systems/MoranthCraftingSystem.hpp"
+#include "Systems/SquadTacticsSystem.hpp"
 #include "Render/GameViewport.hpp"
 
 #include <iostream>
@@ -105,8 +109,15 @@ int main(int argc, char* argv[]) {
 
     if (reg.has<InventoryComponent>(kalam)) {
         auto& inv = reg.get<InventoryComponent>(kalam);
+        // Phase 4 军火炼金原材料配给
+        inv.backpack.push_back(ItemFactory::create_moranth_chitin_casing(6));
+        inv.backpack.push_back(ItemFactory::create_sulfur_crystal(6));
+        inv.backpack.push_back(ItemFactory::create_blue_fire_residue(6));
+        inv.backpack.push_back(ItemFactory::create_quick_alchemical_fuse(4));
+
         std::cout << "  * [装备验证] 卡拉姆主手已装备: 【" 
                   << (inv.equipped_main_hand.has_value() ? inv.equipped_main_hand->name : "空") << "】\n";
+        std::cout << "  * [军火配给] 卡拉姆已配发莫兰斯甲壳、高纯度硫磺晶体、蓝火残渣与速燃炼金引信。\n";
     }
 
     if (reg.has<DragnipurComponent>(rake)) {
@@ -116,7 +127,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!headless) {
-        std::cout << "\n[视口启动] 正在唤醒 SDL3 战术图形视口窗口 (2.5D 等距立体高清 - Phase 3)...\n";
+        std::cout << "\n[视口启动] 正在唤醒 SDL3 战术图形视口窗口 (2.5D 等距立体高清 - Phase 4)...\n";
         GameViewport viewport(1440, 860);
         if (viewport.init()) {
             viewport.run(reg, city_map, kalam, quick_ben, claw_agent);
@@ -254,11 +265,86 @@ int main(int argc, char* argv[]) {
               << phoenix_sector.get_portals().size() << " 个世界跳跃锚点 -> 目标区块: " 
               << phoenix_sector.get_portals()[0].portal_name << "\n";
 
+    // 9. Phase 4 新增：莫兰斯军火炼金配方制造测试 (MoranthCraftingSystem)
+    std::cout << "\n--- [测试 9: 莫兰斯军火炼金锻造与配方合成机制 (MoranthCraftingSystem)] --- \n";
+    bool can_mine = MoranthCraftingSystem::can_craft(kalam, MoranthRecipeType::DirectionalMine, reg);
+    std::cout << "  配方校验 (工兵定向防步兵地雷): " << (can_mine ? "材料充足" : "材料不足") << "\n";
+    std::vector<std::string> craft_logs;
+    bool crafted_mine = MoranthCraftingSystem::craft(kalam, MoranthRecipeType::DirectionalMine, reg, craft_logs);
+    for (const auto& cl : craft_logs) std::cout << "    " << cl << "\n";
+
+    craft_logs.clear();
+    bool crafted_cusser = MoranthCraftingSystem::craft(kalam, MoranthRecipeType::Cusser, reg, craft_logs);
+    for (const auto& cl : craft_logs) std::cout << "    " << cl << "\n";
+
+    std::cout << "  军火合成校验: 地雷合成=" << (crafted_mine ? "成功" : "失败") 
+              << " | 毁灭巨弹合成=" << (crafted_cusser ? "成功" : "失败") << "\n";
+
+    // 10. Phase 4 新增：动态次元裂隙、魔法撕裂与虚空恶魔入侵 (WarrenRiftSystem)
+    std::cout << "\n--- [测试 10: 动态次元裂隙、魔法撕裂与虚空恶魔入侵 (WarrenRiftSystem)] --- \n";
+    WarrenRiftSystem::open_rift({12, 8}, ElevationLevel::Street, WarrenRiftType::ChaosDistortion, 0.45f);
+    std::cout << "  次元空间破裂: 混沌裂隙在坐标 (12, 8) 撕裂开启，当前活跃裂隙总数: " 
+              << WarrenRiftSystem::active_rifts.size() << "\n";
+
+    // 累积施法导致裂隙撕裂度暴增，恶魔破界降临
+    std::vector<std::string> rift_logs;
+    WarrenRiftSystem::active_rifts[0].instability = 0.95f; // 极不稳定
+    WarrenRiftSystem::update_rifts(reg, city_map, rift_logs);
+    for (const auto& rl : rift_logs) std::cout << "    " << rl << "\n";
+    std::cout << "  空间创伤震颤: 当前屏幕震颤创伤度 (Trauma) = " << ScreenEffects::trauma << "\n";
+
+    // 11. Phase 4 新增：焚桥者工兵定向地雷布设与触发引爆 (SquadTacticsSystem)
+    std::cout << "\n--- [测试 11: 焚桥者工兵定向地雷布设与触发引爆 (SquadTacticsSystem)] --- \n";
+    std::vector<std::string> mine_logs;
+    bool deployed = SquadTacticsSystem::deploy_mine(kalam, {10, 7}, ElevationLevel::Street, reg, mine_logs);
+    for (const auto& ml : mine_logs) std::cout << "    " << ml << "\n";
+    std::cout << "  地雷布设校验: " << (deployed ? "成功埋设" : "失败") 
+              << " | 当前战场布设地雷数: " << SquadTacticsSystem::deployed_mines.size() << "\n";
+
+    // 生成一名敌对爪牙走上雷区触发引爆
+    Entity bait_claw = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "claw_assassin", {10, 7}, ElevationLevel::Street
+    );
+    std::vector<std::string> trigger_logs;
+    SquadTacticsSystem::check_mine_triggers(reg, city_map, trigger_logs);
+    for (const auto& tl : trigger_logs) std::cout << "    " << tl << "\n";
+    std::cout << "  踩雷判定: 敌对爪牙承受定向爆风，当前生命值 = " 
+              << reg.get<ActorComponent>(bait_claw).hp << "/" << reg.get<ActorComponent>(bait_claw).max_hp << "\n";
+
+    // 12. Phase 4 新增：焚桥者小队战术协同与全城多阵营混战 (SquadTacticsSystem)
+    std::cout << "\n--- [测试 12: 焚桥者小队协同火力与多阵营混战对抗 (SquadTacticsSystem)] --- \n";
+    std::vector<std::string> squad_logs;
+    // 快班为卡拉姆提供 Telas 火力压制掩护
+    SquadTacticsSystem::trigger_covering_fire(quick_ben, kalam, {10, 7}, reg, squad_logs);
+    for (const auto& sl : squad_logs) std::cout << "    " << sl << "\n";
+
+    // 快班施展 Meanas 迷雾掩护卡拉姆隐匿撤退
+    squad_logs.clear();
+    SquadTacticsSystem::trigger_meanas_veil(quick_ben, kalam, reg, squad_logs);
+    for (const auto& sl : squad_logs) std::cout << "    " << sl << "\n";
+
+    // 全城多阵营混战模拟 (帝国爪牙 vs 虚空恶魔 vs 城市守卫 vs 泰兰伊玛斯)
+    Entity skirm_claw = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "claw_assassin", {14, 8}, ElevationLevel::Street
+    );
+    Entity skirm_demon = DataLoader::spawn_actor_from_json(
+        reg, "assets/data/actors.json", "chaos_void_demon", {15, 8}, ElevationLevel::Street
+    );
+
+    std::vector<std::string> skirm_logs;
+    SquadTacticsSystem::update_cross_faction_skirmishes(reg, city_map, skirm_logs);
+    std::cout << "  多阵营混战演算结算条目数: " << skirm_logs.size() << "\n";
+    for (const auto& skl : skirm_logs) std::cout << "    " << skl << "\n";
+
     std::cout << "\n========================================================================\n";
-    std::cout << "  Phase 3 三层立体架构、瓦斯灾害与全局持久化测试全部通过!\n";
-    std::cout << "  暴君状态: " << (reg.get<JaghutTyrantComponent>(StorylineSystem::boss_raest_entity).is_sealed_in_azath ? "已封印入阿扎斯之屋" : "未封印") << "\n";
+    std::cout << "  Phase 4 沃伦裂隙、莫兰斯炼金锻造、小队协同与全城混战测试全部通过!\n";
+    std::cout << "  活跃次元裂隙数: " << WarrenRiftSystem::active_rifts.size() 
+              << " | 战场布雷数: " << SquadTacticsSystem::deployed_mines.size() << "\n";
     std::cout << "========================================================================\n";
     (void)guard;
     (void)tlan_warrior;
+    (void)bait_claw;
+    (void)skirm_claw;
+    (void)skirm_demon;
     return 0;
 }

@@ -29,6 +29,10 @@
 #include "World/WorldSector.hpp"
 #include "World/HazardSystem.hpp"
 #include "Core/SaveLoadSystem.hpp"
+#include "Render/ScreenEffects.hpp"
+#include "Systems/WarrenRiftSystem.hpp"
+#include "Systems/MoranthCraftingSystem.hpp"
+#include "Systems/SquadTacticsSystem.hpp"
 
 #include <vector>
 #include <string>
@@ -56,7 +60,7 @@ public:
         }
 
         m_window = SDL_CreateWindow(
-            "Malazan: Gardens of the Moon - Darujhistan Tactical Core (Phase 3)",
+            "Malazan: Gardens of the Moon - Darujhistan Tactical Core (Phase 4)",
             m_width, m_height,
             SDL_WINDOW_RESIZABLE
         );
@@ -71,9 +75,12 @@ public:
             return false;
         }
 
-        add_log("=== 达鲁基斯坦 (Darujhistan) 战术视口已启动 [Phase 3] ===");
+        add_log("=== 达鲁基斯坦 (Darujhistan) 战术视口已启动 [Phase 4] ===");
         add_log("[TAB] 循环切换 街面 / 屋顶 / 地下墓穴 立体层级视口");
         add_log("[G] 上下穿行下水道铁格栅梯 (Sewer Grates)");
+        add_log("[C] 打开/关闭 莫兰斯军火炼金锻造台 (Crafting Workshop)");
+        add_log("[M] 在脚下布设工兵定向防步兵地雷 (Deploy Directional Mine)");
+        add_log("[R] 呼叫快班执行小队火力掩护 / 米纳斯迷雾撤退");
         add_log("[F5] 快速存档 (Quick Save) | [F9] 快速读档 (Quick Load)");
         add_log("[E] 与周边 NPC (克鲁普/克罗库斯/雷克) 交谈");
         add_log("[8/X] 凝视巨剑【德拉格尼普尔】内部死界与拉车亡魂");
@@ -165,10 +172,38 @@ private:
             return;
         }
 
+        // 2. 若当前正处于莫兰斯炼金锻造模态中，数字键用于合成军火
+        if (m_show_crafting_modal) {
+            if (key == SDLK_ESCAPE || key == SDLK_C) {
+                m_show_crafting_modal = false;
+                add_log("[炼金工坊] 关闭了锻造台。");
+                return;
+            } else if (key == SDLK_1 || key == SDLK_KP_1) {
+                std::vector<std::string> c_logs;
+                MoranthCraftingSystem::craft(kalam, MoranthRecipeType::Sharper, reg, c_logs);
+                for (const auto& l : c_logs) add_log(l);
+            } else if (key == SDLK_2 || key == SDLK_KP_2) {
+                std::vector<std::string> c_logs;
+                MoranthCraftingSystem::craft(kalam, MoranthRecipeType::Burner, reg, c_logs);
+                for (const auto& l : c_logs) add_log(l);
+            } else if (key == SDLK_3 || key == SDLK_KP_3) {
+                std::vector<std::string> c_logs;
+                MoranthCraftingSystem::craft(kalam, MoranthRecipeType::Cusser, reg, c_logs);
+                for (const auto& l : c_logs) add_log(l);
+            } else if (key == SDLK_4 || key == SDLK_KP_4) {
+                std::vector<std::string> c_logs;
+                MoranthCraftingSystem::craft(kalam, MoranthRecipeType::DirectionalMine, reg, c_logs);
+                for (const auto& l : c_logs) add_log(l);
+            }
+            return;
+        }
+
         switch (key) {
             case SDLK_ESCAPE: {
                 if (m_show_inventory) {
                     m_show_inventory = false;
+                } else if (m_show_crafting_modal) {
+                    m_show_crafting_modal = false;
                 } else if (m_show_dragnipur_wagon) {
                     m_show_dragnipur_wagon = false;
                 } else {
@@ -270,6 +305,52 @@ private:
                     ? "[战术系统] 战争迷雾已启用 (Fog of War: ON)" 
                     : "[战术系统] 战术透视全开 (Fog of War: OFF)");
                 break;
+
+            case SDLK_C:
+                m_show_crafting_modal = !m_show_crafting_modal;
+                add_log(m_show_crafting_modal 
+                    ? "[炼金工坊] 已打开莫兰斯炼金锻造台 [按 1~4 合成军火]" 
+                    : "[炼金工坊] 已关闭锻造台");
+                break;
+
+            case SDLK_M: {
+                auto& p_pos = reg.get<PositionComponent>(kalam);
+                std::vector<std::string> m_logs;
+                SquadTacticsSystem::deploy_mine(kalam, p_pos.coord, p_pos.elevation, reg, m_logs);
+                for (const auto& l : m_logs) add_log(l);
+                action_took_turn = true;
+                break;
+            }
+
+            case SDLK_R: {
+                std::vector<std::string> sq_logs;
+                auto& kalam_act = reg.get<ActorComponent>(kalam);
+                if (kalam_act.hp < kalam_act.max_hp * 0.5f) {
+                    SquadTacticsSystem::trigger_meanas_veil(quick_ben, kalam, reg, sq_logs);
+                } else {
+                    Entity target_enemy = NULL_ENTITY;
+                    for (auto [e, pos, a] : reg.view<PositionComponent, ActorComponent>()) {
+                        if (a.is_alive && (a.faction == Faction::ImperialClaw || 
+                                          a.faction == Faction::ChaosVoidDemons || 
+                                          a.faction == Faction::JaghutTyrantRaest)) {
+                            target_enemy = e;
+                            break;
+                        }
+                    }
+                    if (target_enemy != NULL_ENTITY) {
+                        auto enemy_coord = reg.get<PositionComponent>(target_enemy).coord;
+                        SquadTacticsSystem::trigger_covering_fire(quick_ben, kalam, enemy_coord, reg, sq_logs);
+                        std::vector<std::string> haz_logs;
+                        HazardSystem::check_and_detonate_gas(enemy_coord, ElevationLevel::Street, reg, map, haz_logs);
+                        for (const auto& hl : haz_logs) add_log(hl);
+                    } else {
+                        SquadTacticsSystem::trigger_meanas_veil(quick_ben, kalam, reg, sq_logs);
+                    }
+                }
+                for (const auto& l : sq_logs) add_log(l);
+                action_took_turn = true;
+                break;
+            }
 
             case SDLK_I:
                 m_show_inventory = !m_show_inventory;
@@ -449,6 +530,27 @@ private:
             for (const auto& l : story_logs) {
                 add_log(l);
             }
+
+            // Phase 4: 沃伦次元裂隙推进与虚空恶魔入侵
+            std::vector<std::string> rift_logs;
+            WarrenRiftSystem::update_rifts(reg, map, rift_logs);
+            for (const auto& rl : rift_logs) {
+                add_log(rl);
+            }
+
+            // Phase 4: 工兵定向地雷触发与爆炸判定
+            std::vector<std::string> mine_trig_logs;
+            SquadTacticsSystem::check_mine_triggers(reg, map, mine_trig_logs);
+            for (const auto& mtl : mine_trig_logs) {
+                add_log(mtl);
+            }
+
+            // Phase 4: 全城多阵营混战对抗 (帝国爪牙 vs 虚空恶魔 vs 城防军)
+            std::vector<std::string> skirm_logs;
+            SquadTacticsSystem::update_cross_faction_skirmishes(reg, map, skirm_logs);
+            for (const auto& skl : skirm_logs) {
+                add_log(skl);
+            }
         }
     }
 
@@ -486,30 +588,48 @@ private:
         // 1. 渲染 2.5D 等距立体世界 (3D 建筑挤出、战争迷雾、奥塔拉尔死域、蓝火动态漫射、角色立柱)
         render_iso_world(reg, map, pulse);
 
-        // 2. 渲染右侧 HUD 与信息面板
+        // 2. 渲染受到创伤/重击时的全屏流血猩红滤镜 (Blood Flash Overlay)
+        if (ScreenEffects::blood_flash > 0.01f) {
+            SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(m_renderer, 180, 20, 20, 
+                                   static_cast<Uint8>(std::clamp(ScreenEffects::blood_flash * 150.0f, 0.0f, 150.0f)));
+            SDL_FRect scr{0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height)};
+            SDL_RenderFillRect(m_renderer, &scr);
+        }
+
+        // 3. 渲染右侧 HUD 与信息面板
         render_hud(reg, kalam, quick_ben, claw);
 
-        // 3. 渲染行囊物品库模态抽屉
+        // 4. 渲染行囊物品库模态抽屉
         if (m_show_inventory) {
             render_inventory_modal(reg, kalam);
         }
 
-        // 4. 渲染 NPC 剧情对话框
+        // 5. 渲染莫兰斯军火炼金锻造模态
+        if (m_show_crafting_modal) {
+            render_crafting_modal(reg, kalam);
+        }
+
+        // 6. 渲染 NPC 剧情对话框
         if (m_active_dialogue_npc != NULL_ENTITY) {
             render_dialogue_modal();
         }
 
-        // 5. 渲染德拉格尼普尔黑剑大车囚界模态
+        // 7. 渲染德拉格尼普尔黑剑大车囚界模态
         if (m_show_dragnipur_wagon) {
             render_dragnipur_modal(reg);
         }
+
+        // 更新屏幕创伤衰减状态
+        ScreenEffects::update_frame();
 
         SDL_RenderPresent(m_renderer);
     }
 
     void render_iso_world(Registry& reg, DarujhistanMap& map, float pulse) {
-        float origin_x = 440.0f;
-        float origin_y = 120.0f;
+        auto [shake_x, shake_y] = ScreenEffects::get_shake_offset(pulse);
+        float origin_x = 440.0f + shake_x;
+        float origin_y = 120.0f + shake_y;
         int32_t w = map.width();
         int32_t h = map.height();
 
@@ -671,6 +791,25 @@ private:
                     }
                 }
 
+                // 2.5 绘制工兵防步兵定向地雷与次元沃伦裂隙
+                float gz_effect = 0.0f;
+                if (m_view_elevation == ElevationLevel::Rooftop) gz_effect = 1.0f;
+                else if (m_view_elevation == ElevationLevel::Underground) gz_effect = -1.0f;
+
+                for (const auto& mine : SquadTacticsSystem::deployed_mines) {
+                    if (mine.coord == p && mine.elevation == m_view_elevation && mine.is_armed) {
+                        IsometricRenderer::draw_iso_sapper_mine(m_renderer, static_cast<float>(x), static_cast<float>(y),
+                                                               gz_effect, origin_x, origin_y, pulse);
+                    }
+                }
+
+                for (const auto& rift : WarrenRiftSystem::active_rifts) {
+                    if (rift.coord == p && rift.elevation == m_view_elevation && rift.is_open) {
+                        IsometricRenderer::draw_iso_warren_rift(m_renderer, static_cast<float>(x), static_cast<float>(y),
+                                                               gz_effect, origin_x, origin_y, static_cast<int>(rift.type), pulse);
+                    }
+                }
+
                 // 3. 绘制 3D 实体角色立柱与高度层级
                 for (auto [ent, pos, actor] : reg.view<PositionComponent, ActorComponent>()) {
                     if (pos.coord == p) {
@@ -740,6 +879,10 @@ private:
                         } else if (actor.faction == Faction::TlanImass) {
                             color = {0.88f, 0.85f, 0.70f, 1.0f}; // 泰兰·伊玛斯太古白骨米黄
                             glyph = 'T';
+                            scale = 1.35f;
+                        } else if (actor.faction == Faction::ChaosVoidDemons) {
+                            color = {0.85f, 0.20f, 0.95f, 1.0f}; // 虚空恶魔妖异深紫红
+                            glyph = 'D';
                             scale = 1.35f;
                         }
 
@@ -933,6 +1076,8 @@ private:
         y += 18.0f;
         FontRenderer::draw_text(m_renderer, "[W,A,S,D] 3D MOVE | [G] SEWER STAIRS | [TAB] ELEV", hud_x, y, 1.35f, {180, 180, 180, 255});
         y += 15.0f;
+        FontRenderer::draw_text(m_renderer, "[C] CRAFT | [M] MINE | [R] SQUAD COVER", hud_x, y, 1.35f, {255, 140, 0, 255});
+        y += 15.0f;
         FontRenderer::draw_text(m_renderer, "[F5] QUICK SAVE | [F9] QUICK LOAD | [E] TALK NPC", hud_x, y, 1.35f, {180, 220, 255, 255});
         y += 15.0f;
         FontRenderer::draw_text(m_renderer, "[1] SHADOWFIRE | [2] BURNER | [3] PLUNGE", hud_x, y, 1.35f, {180, 120, 255, 255});
@@ -1119,6 +1264,71 @@ private:
         FontRenderer::draw_text(m_renderer, "PRESS [8/X/ESC] TO CLOSE WAGON VIEW", dx, dy, 1.4f, {255, 215, 0, 255});
     }
 
+    void render_crafting_modal(Registry& reg, Entity kalam) {
+        SDL_FRect box{130.0f, 90.0f, 720.0f, 620.0f};
+        SDL_SetRenderDrawColor(m_renderer, 15, 18, 25, 248);
+        SDL_RenderFillRect(m_renderer, &box);
+        SDL_SetRenderDrawColor(m_renderer, 255, 140, 0, 255);
+        SDL_RenderRect(m_renderer, &box);
+
+        float cx = 160.0f;
+        float cy = 120.0f;
+
+        FontRenderer::draw_text(m_renderer, "=== MORANTH MUNITIONS ALCHEMY WORKSHOP ===", cx, cy, 1.8f, {255, 140, 0, 255});
+        cy += 28.0f;
+        FontRenderer::draw_text(m_renderer, "Forging High-Explosive Munitions with Moranth Blue Fire Alchemy", cx, cy, 1.3f, {0, 229, 255, 255});
+        cy += 34.0f;
+
+        // 材料库存展示
+        FontRenderer::draw_text(m_renderer, "[ALCHEMICAL RAW MATERIALS IN BACKPACK]:", cx, cy, 1.55f, {255, 215, 0, 255});
+        cy += 24.0f;
+
+        if (reg.has<InventoryComponent>(kalam)) {
+            const auto& inv = reg.get<InventoryComponent>(kalam);
+            int chitin = inv.count_item("mat_moranth_chitin");
+            int sulfur = inv.count_item("mat_sulfur_crystal");
+            int blue_fire = inv.count_item("mat_blue_fire_residue");
+            int fuse = inv.count_item("mat_quick_fuse");
+
+            std::string mat_str1 = "- Moranth Chitin Casing (甲壳): " + std::to_string(chitin)
+                                 + " | Sulfur Crystals (硫磺): " + std::to_string(sulfur);
+            FontRenderer::draw_text(m_renderer, mat_str1, cx + 10.0f, cy, 1.4f, {200, 220, 200, 255});
+            cy += 20.0f;
+
+            std::string mat_str2 = "- Blue Fire Residue (蓝火残渣): " + std::to_string(blue_fire)
+                                 + " | Quick Alchemical Fuse (引信): " + std::to_string(fuse);
+            FontRenderer::draw_text(m_renderer, mat_str2, cx + 10.0f, cy, 1.4f, {200, 220, 200, 255});
+            cy += 32.0f;
+        }
+
+        // 配方选择列表
+        FontRenderer::draw_text(m_renderer, "[AVAILABLE ALCHEMY RECIPES]:", cx, cy, 1.55f, {0, 229, 255, 255});
+        cy += 24.0f;
+
+        auto recipes = MoranthCraftingSystem::get_all_recipes();
+        for (size_t i = 0; i < recipes.size(); ++i) {
+            const auto& r = recipes[i];
+            bool can = MoranthCraftingSystem::can_craft(kalam, r.type, reg);
+            SDL_Color item_col = can ? SDL_Color{255, 255, 255, 255} : SDL_Color{130, 130, 130, 255};
+            std::string key_str = "[" + std::to_string(i + 1) + "] " + r.name + (can ? " [READY]" : " [LACK MATERIALS]");
+            FontRenderer::draw_text(m_renderer, key_str, cx + 10.0f, cy, 1.45f, item_col);
+            cy += 18.0f;
+
+            std::string req_str = "    Requires: ";
+            for (size_t k = 0; k < r.required_materials.size(); ++k) {
+                req_str += r.required_materials[k].material_id + " x" + std::to_string(r.required_materials[k].quantity);
+                if (k + 1 < r.required_materials.size()) req_str += ", ";
+            }
+            FontRenderer::draw_text(m_renderer, req_str, cx + 10.0f, cy, 1.2f, {170, 170, 170, 255});
+            cy += 16.0f;
+            FontRenderer::draw_text(m_renderer, "    Effect: " + r.description, cx + 10.0f, cy, 1.15f, {140, 180, 220, 255});
+            cy += 24.0f;
+        }
+
+        cy += 16.0f;
+        FontRenderer::draw_text(m_renderer, "PRESS [1~4] TO CRAFT MUNITION | [C/ESC] CLOSE WORKSHOP", cx, cy, 1.4f, {255, 215, 0, 255});
+    }
+
     int m_width;
     int m_height;
     SDL_Window* m_window{nullptr};
@@ -1133,6 +1343,9 @@ private:
     Entity m_active_dialogue_npc{NULL_ENTITY};
     DialogueNode m_current_dialogue;
     bool m_show_dragnipur_wagon{false};
+
+    // Phase 4 新增：炼金制作模态
+    bool m_show_crafting_modal{false};
 };
 
 } // namespace Malazan

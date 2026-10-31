@@ -45,7 +45,8 @@ enum class Faction : uint8_t {
     TisteAndii,          // 漂浮城提斯·安迪尔族 (Anomander Rake 阵营)
     PhoenixInnCircle,    // 凤凰客栈同盟 (Kruppe, Crokus, Murillio)
     JaghutTyrantRaest,   // 沉睡与苏醒的贾格特暴君
-    TlanImass            // 泰兰·伊玛斯太古骨骸战士 (Logros/Kron T'lan Imass)
+    TlanImass,           // 泰兰·伊玛斯太古骨骸战士 (Logros/Kron T'lan Imass)
+    ChaosVoidDemons      // 沃伦裂隙混沌空间恶魔 (Chaos Rift Spawns)
 };
 
 // 沃伦法术界 (Warrens)
@@ -75,10 +76,11 @@ enum class DamageType : uint8_t {
 
 // 莫兰斯炼金弹药类型
 enum class MoranthMunitionType : uint8_t {
-    Sharper,  // 破片弹：高范围物理割裂，秒杀轻甲
-    Burner,   // 燃烧弹：剧烈引燃，可诱爆蓝火煤气管网
-    Smoker,   // 烟雾弹：全屏遮蔽视野，强行进入隐匿
-    Quencher  // 灭能弹：熄灭范围内的魔法反应与沃伦连接
+    Sharper,         // 破片弹：高范围物理割裂，秒杀轻甲
+    Burner,          // 燃烧弹：剧烈引燃，可诱爆蓝火煤气管网
+    Smoker,          // 烟雾弹：全屏遮蔽视野，强行进入隐匿
+    Quencher,        // 灭能弹：熄灭范围内的魔法反应与沃伦连接
+    DirectionalMine  // 定向破片雷：工兵战术布设，范围触发毁灭杀伤
 };
 
 } // namespace Malazan

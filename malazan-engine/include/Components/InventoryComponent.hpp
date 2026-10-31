@@ -80,6 +80,16 @@ struct InventoryComponent {
         }
         return r;
     }
+
+    [[nodiscard]] int32_t count_item(const std::string& item_id) const {
+        int32_t total = 0;
+        for (const auto& item : backpack) {
+            if (item.id == item_id) {
+                total += std::max(1, item.charges);
+            }
+        }
+        return total;
+    }
 };
 
 } // namespace Malazan

@@ -12,7 +12,8 @@ enum class ItemCategory : uint8_t {
     Armor,
     Munition,
     Consumable,
-    Relic
+    Relic,
+    CraftingMaterial
 };
 
 enum class ItemRarity : uint8_t {
@@ -206,6 +207,70 @@ public:
             .heal_amount = 0,
             .charges = 1,
             .max_charges = 1
+        };
+    }
+
+    static Item create_sulfur_crystal(int32_t count = 1) {
+        return Item{
+            .id = "sulfur_crystal",
+            .name = "炼金天然硫磺结晶 (Sulfur Crystal)",
+            .description = "莫兰斯黑火药提纯核心组分，遇火剧烈释放氧化膨胀能量。",
+            .category = ItemCategory::CraftingMaterial,
+            .rarity = ItemRarity::Common,
+            .charges = count,
+            .max_charges = 99
+        };
+    }
+
+    static Item create_blue_fire_residue(int32_t count = 1) {
+        return Item{
+            .id = "blue_fire_residue",
+            .name = "达鲁基斯坦蓝火残渣 (Blue Fire Residue)",
+            .description = "地底高压煤气冷凝萃取物，极度易挥发并带有高热沃伦催化反应。",
+            .category = ItemCategory::CraftingMaterial,
+            .rarity = ItemRarity::MoranthCraft,
+            .charges = count,
+            .max_charges = 99
+        };
+    }
+
+    static Item create_moranth_chitin_casing(int32_t count = 1) {
+        return Item{
+            .id = "moranth_chitin_casing",
+            .name = "莫兰斯几丁质外壳 (Moranth Chitin Casing)",
+            .description = "黑莫兰斯军械独有的耐压虫壳，能在高压下封闭炸药能量直至引信触发。",
+            .category = ItemCategory::CraftingMaterial,
+            .rarity = ItemRarity::MoranthCraft,
+            .charges = count,
+            .max_charges = 99
+        };
+    }
+
+    static Item create_quick_alchemical_fuse(int32_t count = 1) {
+        return Item{
+            .id = "alchemical_fuse",
+            .name = "炼金速燃引信 (Quick Fuse)",
+            .description = "浸泡过特拉斯（Telas）微量火油的精准延时引信。",
+            .category = ItemCategory::CraftingMaterial,
+            .rarity = ItemRarity::Common,
+            .charges = count,
+            .max_charges = 99
+        };
+    }
+
+    static Item create_moranth_directional_mine(int32_t count = 1) {
+        return Item{
+            .id = "moranth_directional_mine",
+            .name = "破桥军莫兰斯定向地雷 (Sapper Directional Mine)",
+            .description = "工兵费德勒与赫奇联合研制，布设在街面或屋顶，敌方踏入扇面立即引发毁灭性破片与冲击波。",
+            .category = ItemCategory::Munition,
+            .rarity = ItemRarity::MoranthCraft,
+            .damage = 125,
+            .damage_type = DamageType::MoranthExplosive,
+            .is_munition = true,
+            .munition_type = MoranthMunitionType::DirectionalMine,
+            .charges = count,
+            .max_charges = 10
         };
     }
 };
